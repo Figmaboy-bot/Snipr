@@ -1,0 +1,48 @@
+/* DesignVault — Page overlay styles */
+
+.dv-highlightable {
+  position: relative;
+  cursor: pointer !important;
+  transition: outline 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dv-highlightable.dv-hovered {
+  outline: 2px dashed #6366f1 !important;
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 2000px rgba(99, 102, 241, 0.04) !important;
+}
+
+.dv-highlightable.dv-selected {
+  outline: 2.5px solid #6366f1 !important;
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 2000px rgba(99, 102, 241, 0.08) !important;
+}
+
+.dv-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2147483647;
+  background: #6366f1;
+  color: #fff;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.dv-highlightable.dv-hovered .dv-badge,
+.dv-highlightable.dv-selected .dv-badge {
+  opacity: 1;
+}
+
+.dv-highlightable.dv-selected .dv-badge {
+  background: #4f46e5;
+}

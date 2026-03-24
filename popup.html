@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DesignVault</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/popup.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <span class="logo-icon"><img src="icons/icon28.png" alt=""></span>
+        <span class="logo-text">Snpr</span>
+      </div>
+      <div class="header-actions">
+        <button id="btn-library" class="icon-btn" title="View Library">📚</button>
+        <button id="btn-settings" class="icon-btn" title="Settings">⚙️</button>
+      </div>
+    </header>
+
+    <!-- CAPTURE VIEW -->
+    <div id="view-capture" class="view active">
+      <div class="scan-bar">
+        <div class="scan-info">
+          <span id="page-title" class="page-title">—</span>
+          <span id="section-count" class="section-count">0 sections found</span>
+        </div>
+        <button id="btn-scan" class="btn-primary">Scan Page</button>
+      </div>
+
+      <div id="sections-list" class="sections-list hidden">
+        <p class="list-hint">Click sections on the page to select them, or select from the list below:</p>
+        <div id="sections-items"></div>
+      </div>
+
+      <div id="save-panel" class="save-panel hidden">
+        <div class="save-panel-header">
+          <span id="selected-count">0 selected</span>
+          <button id="btn-clear-selection" class="link-btn">Clear</button>
+        </div>
+
+        <label class="field-label">Save to folder</label>
+        <div id="folder-select" class="folder-grid"></div>
+
+        <label class="field-label">Categories</label>
+        <div id="category-chips" class="chip-group"></div>
+        <div class="inline-add">
+          <input id="new-category-input" type="text" placeholder="Add category…" class="text-input" />
+          <button id="btn-add-category" class="btn-ghost-sm">Add</button>
+        </div>
+
+        <label class="field-label">Note <span class="optional">(optional)</span></label>
+        <textarea id="note-input" class="text-area" placeholder="What do you like about this?"></textarea>
+
+        <button id="btn-save" class="btn-save">Save to Vault ⬡</button>
+      </div>
+
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon">⬡</div>
+        <p>Scan any page to detect its sections,<br/>then save the ones you love.</p>
+      </div>
+    </div>
+
+    <!-- LIBRARY VIEW -->
+    <div id="view-library" class="view">
+      <div class="library-header">
+        <button id="btn-back" class="link-btn">← Back</button>
+        <h2 class="view-title">Your Vault</h2>
+        <button id="btn-export" class="btn-ghost-sm">Export</button>
+      </div>
+
+      <div class="library-filters">
+        <div id="folder-tabs" class="folder-tabs"></div>
+        <select id="category-filter" class="select-input">
+          <option value="">All categories</option>
+        </select>
+      </div>
+
+      <div id="library-grid" class="library-grid"></div>
+      <div id="library-empty" class="empty-state hidden">
+        <div class="empty-icon">📭</div>
+        <p>Nothing saved yet.<br/>Go capture some inspiration!</p>
+      </div>
+    </div>
+
+    <!-- SETTINGS VIEW -->
+    <div id="view-settings" class="view">
+      <div class="library-header">
+        <button id="btn-back-settings" class="link-btn">← Back</button>
+        <h2 class="view-title">Settings</h2>
+      </div>
+
+      <section class="settings-section">
+        <h3 class="settings-title">Folders</h3>
+        <div id="folder-manager"></div>
+        <div class="inline-add">
+          <input id="new-folder-name" type="text" placeholder="Folder name…" class="text-input" />
+          <input id="new-folder-icon" type="text" placeholder="📁" class="text-input icon-input" />
+          <button id="btn-create-folder" class="btn-ghost-sm">Add</button>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h3 class="settings-title">Categories</h3>
+        <div id="category-manager"></div>
+      </section>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast hidden"></div>
+
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
