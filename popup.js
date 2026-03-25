@@ -1,26 +1,4 @@
-async function captureSectionScreenshot(sectionId) {
-  const tab = await getActiveTab();
-  const {rect} = await sendToContent({type: "GET_SECTION_RECT", sectionId});
-  if (!rect) return null;
-
-  const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {format: "png"});
-  const img = await new Promise((resolve, reject) => {
-    const i = new Image();
-    i.onload = () => resolve(i);
-    i.onerror = reject;
-    i.src = dataUrl;
-  });
-
-  const canvas = document.createElement("canvas");
-  canvas.width = rect.width;
-  canvas.height = rect.height;
-  const ctx = canvas.getContext("2d");
-  const sx = rect.x - window.scrollX;
-  const sy = rect.y - window.scrollY;
-  // with captureVisibleTab, image uses viewport coords and includes scroll; maybe same as rect
-  ctx.drawImage(img, sx, sy, rect.width, rect.height, 0, 0, rect.width, rect.height);
-  return canvas.toDataURL("image/png");
-}// DesignVault — Popup Logic
+// DesignVault — Popup Logic
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const state = {
@@ -32,6 +10,8 @@ const state = {
   categories: [],
   libraryFolderFilter: null,
   libraryCategoryFilter: "",
+  detailSave: null,         // the save object currently shown in detail view
+  detailFromView: "library", // which view to return to from detail
 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
@@ -40,6 +20,7 @@ const $ = id => document.getElementById(id);
 const views = {
   capture:  $("view-capture"),
   library:  $("view-library"),
+  detail:   $("view-detail"),
   settings: $("view-settings"),
 };
 
@@ -78,6 +59,66 @@ async function loadBootstrap() {
   ]);
   state.folders = fRes.folders || [];
   state.categories = cRes.categories || [];
+}
+
+// ── Screenshot Capture ────────────────────────────────────────────────────────
+// captureVisibleTab returns a full-resolution PNG scaled by devicePixelRatio.
+// e.g. on a 2x Retina screen, a CSS rect of {x:0, y:0, w:400, h:200}
+// maps to physical pixels {x:0, y:0, w:800, h:400} in the captured image.
+// We must multiply all crop coords by DPR to get the correct slice.
+async function captureSectionScreenshot(sectionId) {
+  try {
+    const tab = await getActiveTab();
+
+    // Get rect + scroll + devicePixelRatio from the content script
+    const response = await sendToContent({ type: "GET_SECTION_RECT", sectionId });
+    if (!response?.rect) return null;
+
+    const { rect, dpr = 1 } = response.rect;
+
+    // Clamp rect to viewport bounds (section may extend beyond visible area)
+    const vpW = response.rect.viewportWidth  || 99999;
+    const vpH = response.rect.viewportHeight || 99999;
+    const cssX = Math.max(0, rect.x);
+    const cssY = Math.max(0, rect.y);
+    const cssW = Math.min(rect.width,  vpW - cssX);
+    const cssH = Math.min(rect.height, vpH - cssY);
+
+    if (cssW <= 0 || cssH <= 0) return null;
+
+    // Scale CSS coords → physical pixel coords for cropping
+    const px = Math.round(cssX * dpr);
+    const py = Math.round(cssY * dpr);
+    const pw = Math.round(cssW * dpr);
+    const ph = Math.round(cssH * dpr);
+
+    // captureVisibleTab captures current viewport at full physical resolution
+    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = dataUrl;
+    });
+
+    // Guard against crop going out of image bounds
+    const safePW = Math.min(pw, img.naturalWidth  - px);
+    const safePH = Math.min(ph, img.naturalHeight - py);
+    if (safePW <= 0 || safePH <= 0) return null;
+
+    // Draw at CSS size (divide back by DPR) so the saved PNG isn't huge
+    const canvas = document.createElement("canvas");
+    canvas.width  = Math.round(safePW / dpr);
+    canvas.height = Math.round(safePH / dpr);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, px, py, safePW, safePH, 0, 0, canvas.width, canvas.height);
+
+    return canvas.toDataURL("image/png");
+  } catch (err) {
+    console.warn("DesignVault: screenshot capture failed", err);
+    return null;
+  }
 }
 
 // ── Scan ──────────────────────────────────────────────────────────────────────
@@ -207,18 +248,36 @@ function renderCategoryChips() {
   });
 }
 
-// ── Save ──────────────────────────────────────────────────────────────────────
+// ── Save (with screenshot capture) ───────────────────────────────────────────
 async function saveSelectedSections() {
   if (!state.selectedSections.length) return showToast("Select at least one section", "error");
   if (!state.selectedFolderId) return showToast("Pick a folder first", "error");
 
+  // Show progress feedback while capturing screenshots
+  const saveBtn = $("btn-save");
+  saveBtn.textContent = "Capturing…";
+  saveBtn.disabled = true;
+
+  // Capture a screenshot for each selected section
+  const sectionsWithScreenshots = await Promise.all(
+    state.selectedSections.map(async (section) => {
+      const screenshot = await captureSectionScreenshot(section.id);
+      return { ...section, screenshot };
+    })
+  );
+
+  saveBtn.textContent = "Saving…";
+
   const res = await chrome.runtime.sendMessage({
     type: "SAVE_SECTIONS",
-    sections: state.selectedSections,
+    sections: sectionsWithScreenshots,
     folderId: state.selectedFolderId,
     categories: [...state.selectedCategories],
     note: $("note-input").value.trim(),
   });
+
+  saveBtn.textContent = "Save to Vault ⬡";
+  saveBtn.disabled = false;
 
   if (res.ok) {
     showToast(`✓ Saved ${res.saved} section${res.saved !== 1 ? "s" : ""}!`);
@@ -294,27 +353,97 @@ function renderLibrary(saves) {
     const folder = state.folders.find(f => f.id === save.folderId);
     const card = document.createElement("div");
     card.className = "save-card";
+
+    // Screenshot thumbnail if available
+    const thumbHtml = save.screenshot
+      ? `<div class="save-card-thumb"><img src="${save.screenshot}" alt="${save.label}" /></div>`
+      : `<div class="save-card-thumb save-card-thumb--empty"><span>📷</span></div>`;
+
     card.innerHTML = `
-      <div class="save-card-header">
-        <span class="save-card-title">${folder ? folder.icon + " " : ""}${save.label}</span>
-        <button class="delete-btn" data-id="${save.id}" title="Delete">✕</button>
+      ${thumbHtml}
+      <div class="save-card-body">
+        <div class="save-card-header">
+          <span class="save-card-title">${folder ? folder.icon + " " : ""}${save.label}</span>
+          <button class="delete-btn" data-id="${save.id}" title="Delete">✕</button>
+        </div>
+        <div class="save-card-url">
+          <a href="${save.url}" target="_blank" title="${save.pageTitle}">${new URL(save.url).hostname}</a>
+        </div>
+        ${save.categories?.length ? `
+          <div class="save-card-chips">
+            ${save.categories.map(c => `<span class="mini-chip">${c}</span>`).join("")}
+          </div>` : ""}
+        <div class="save-card-date">${new Date(save.savedAt).toLocaleDateString()}</div>
       </div>
-      <div class="save-card-url">
-        <a href="${save.url}" target="_blank" title="${save.pageTitle}">${save.url}</a>
-      </div>
-      ${save.categories?.length ? `
-        <div class="save-card-chips">
-          ${save.categories.map(c => `<span class="mini-chip">${c}</span>`).join("")}
-        </div>` : ""}
-      ${save.note ? `<div style="font-size:11px;color:var(--muted)">${save.note}</div>` : ""}
-      <div class="save-card-date">${new Date(save.savedAt).toLocaleDateString()}</div>
     `;
-    card.querySelector(".delete-btn").addEventListener("click", async () => {
+
+    // Click anywhere on card body (except delete btn) → open detail view
+    card.addEventListener("click", (e) => {
+      if (e.target.classList.contains("delete-btn")) return;
+      if (e.target.closest("a")) return;
+      openDetailView(save);
+    });
+
+    card.querySelector(".delete-btn").addEventListener("click", async (e) => {
+      e.stopPropagation();
       await chrome.runtime.sendMessage({ type: "DELETE_SAVE", saveId: save.id });
       loadLibrary();
     });
+
     grid.appendChild(card);
   });
+}
+
+// ── Detail View ───────────────────────────────────────────────────────────────
+function openDetailView(save) {
+  state.detailSave = save;
+
+  const folder = state.folders.find(f => f.id === save.folderId);
+
+  // Title
+  $("detail-title").textContent = save.label;
+
+  // Screenshot — use display style directly to avoid CSS specificity fights
+  const img = $("detail-screenshot");
+  const noShot = $("detail-no-screenshot");
+  if (save.screenshot) {
+    img.src = save.screenshot;
+    img.style.display = "block";
+    noShot.style.display = "none";
+  } else {
+    img.src = "";
+    img.style.display = "none";
+    noShot.style.display = "flex";
+  }
+
+  // Metadata
+  $("detail-folder").textContent = folder ? `${folder.icon} ${folder.name}` : "—";
+  const urlEl = $("detail-url");
+  urlEl.href = save.url;
+  urlEl.textContent = save.url;
+
+  $("detail-date").textContent = new Date(save.savedAt).toLocaleString();
+
+  // Categories
+  const catsEl = $("detail-categories");
+  const catsRow = $("detail-categories-row");
+  if (save.categories?.length) {
+    catsEl.innerHTML = save.categories.map(c => `<span class="mini-chip">${c}</span>`).join("");
+    catsRow.classList.remove("hidden");
+  } else {
+    catsRow.classList.add("hidden");
+  }
+
+  // Note
+  const noteRow = $("detail-note-row");
+  if (save.note) {
+    $("detail-note").textContent = save.note;
+    noteRow.classList.remove("hidden");
+  } else {
+    noteRow.classList.add("hidden");
+  }
+
+  showView("detail");
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -408,6 +537,22 @@ function wireEvents() {
   $("category-filter").addEventListener("change", e => {
     state.libraryCategoryFilter = e.target.value;
     loadLibrary();
+  });
+
+  // Detail view — back button returns to library
+  $("btn-back-detail").addEventListener("click", async () => {
+    await loadLibrary();
+    showView("library");
+  });
+
+  // Detail view — delete button
+  $("btn-delete-detail").addEventListener("click", async () => {
+    if (!state.detailSave) return;
+    await chrome.runtime.sendMessage({ type: "DELETE_SAVE", saveId: state.detailSave.id });
+    state.detailSave = null;
+    await loadLibrary();
+    showView("library");
+    showToast("Section deleted");
   });
 
   // Settings

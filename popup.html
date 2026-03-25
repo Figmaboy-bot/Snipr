@@ -88,6 +88,46 @@
       </div>
     </div>
 
+    <!-- DETAIL VIEW -->
+    <div id="view-detail" class="view">
+      <div class="library-header">
+        <button id="btn-back-detail" class="link-btn">← Back</button>
+        <h2 class="view-title" id="detail-title">Section</h2>
+        <button id="btn-delete-detail" class="btn-ghost-sm btn-danger-sm">Delete</button>
+      </div>
+
+      <div id="detail-screenshot-wrap" class="detail-screenshot-wrap">
+        <img id="detail-screenshot" class="detail-screenshot" src="" alt="Section screenshot" />
+        <div id="detail-no-screenshot" class="detail-no-screenshot hidden">
+          <span>📷</span>
+          <p>No screenshot available</p>
+        </div>
+      </div>
+
+      <div class="detail-meta">
+        <div class="detail-meta-row">
+          <span class="detail-meta-label">📁 Folder</span>
+          <span id="detail-folder" class="detail-meta-value">—</span>
+        </div>
+        <div class="detail-meta-row">
+          <span class="detail-meta-label">🔗 Source</span>
+          <a id="detail-url" class="detail-meta-value detail-link" href="#" target="_blank">—</a>
+        </div>
+        <div class="detail-meta-row">
+          <span class="detail-meta-label">📅 Saved</span>
+          <span id="detail-date" class="detail-meta-value">—</span>
+        </div>
+        <div id="detail-categories-row" class="detail-meta-row">
+          <span class="detail-meta-label">🏷 Tags</span>
+          <div id="detail-categories" class="detail-meta-value chip-group-sm"></div>
+        </div>
+        <div id="detail-note-row" class="detail-meta-row hidden">
+          <span class="detail-meta-label">📝 Note</span>
+          <span id="detail-note" class="detail-meta-value detail-note-text">—</span>
+        </div>
+      </div>
+    </div>
+
     <!-- SETTINGS VIEW -->
     <div id="view-settings" class="view">
       <div class="library-header">

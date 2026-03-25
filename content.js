@@ -169,17 +169,29 @@
   }
 
   // ── Screenshot capture via canvas ──────────────────────────────────────────
-
+  // Returns the section's viewport-relative bounding rect, the device pixel
+  // ratio, and viewport dimensions — everything the popup needs to correctly
+  // crop a captureVisibleTab image (which is at physical/DPR resolution).
   function captureSection(sectionId) {
     const section = detectedSections.find(s => s.id === sectionId);
     if (!section) return null;
 
-    const rect = section.el.getBoundingClientRect();
+    const domRect = section.el.getBoundingClientRect();
+
     return {
-      x: Math.round(rect.left + window.scrollX),
-      y: Math.round(rect.top + window.scrollY),
-      width: Math.round(rect.width),
-      height: Math.round(rect.height),
+      rect: {
+        x: Math.round(domRect.left),
+        y: Math.round(domRect.top),
+        width: Math.round(domRect.width),
+        height: Math.round(domRect.height),
+      },
+      // devicePixelRatio: captureVisibleTab output is scaled by this factor
+      dpr: window.devicePixelRatio || 1,
+      // Viewport size so popup can clamp the crop bounds
+      viewportWidth:  window.innerWidth,
+      viewportHeight: window.innerHeight,
+      scrollX: Math.round(window.scrollX),
+      scrollY: Math.round(window.scrollY),
     };
   }
 

@@ -661,3 +661,157 @@ body {
   font-size: 48px;
   margin: 0;
 }
+
+/* ── APPEND THIS TO YOUR styles/popup.css ─────────────────────────────────────
+   Detail view styles + updated library card thumbnail styles
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Library card: updated layout with screenshot thumbnail ─────────────────── */
+
+.save-card {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.save-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+}
+
+.save-card-thumb {
+  width: 100%;
+  height: 100px;
+  overflow: hidden;
+  border-radius: var(--radius, 6px) var(--radius, 6px) 0 0;
+  background: var(--surface2, #2a2a2a);
+  flex-shrink: 0;
+}
+
+.save-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+
+.save-card-thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted, #888);
+  font-size: 22px;
+  opacity: 0.5;
+}
+
+.save-card-body {
+  padding: 8px 10px 10px;
+}
+
+/* ── Detail view ──────────────────────────────────────────────────────────── */
+
+#view-detail {
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+}
+
+.detail-screenshot-wrap {
+  width: 100%;
+  background: var(--surface2, #1e1e1e);
+  border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 140px;
+  max-height: 300px;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.detail-screenshot {
+  width: 100%;
+  height: auto;
+  max-height: 300px;
+  object-fit: cover;
+  object-position: top center;
+  display: none; /* JS controls visibility via style.display */
+}
+
+.detail-no-screenshot {
+  display: none; /* JS controls visibility via style.display */
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted, #888);
+  font-size: 12px;
+  padding: 32px;
+  width: 100%;
+  min-height: 140px;
+}
+
+.detail-no-screenshot span {
+  font-size: 32px;
+  opacity: 0.35;
+}
+
+.detail-meta {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.detail-meta-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.detail-meta-label {
+  color: var(--muted, #888);
+  min-width: 64px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.detail-meta-value {
+  color: var(--text, #f0f0f0);
+  flex: 1;
+  word-break: break-all;
+}
+
+.detail-link {
+  color: var(--accent, #7b6ef6);
+  text-decoration: none;
+}
+
+.detail-link:hover {
+  text-decoration: underline;
+}
+
+.detail-note-text {
+  font-style: italic;
+  color: var(--muted, #aaa);
+}
+
+.chip-group-sm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Danger-style ghost button for delete in detail view */
+.btn-danger-sm {
+  color: #e05c5c !important;
+  border-color: rgba(224, 92, 92, 0.35) !important;
+}
+
+.btn-danger-sm:hover {
+  background: rgba(224, 92, 92, 0.12) !important;
+}
