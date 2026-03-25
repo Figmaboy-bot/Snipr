@@ -62,65 +62,38 @@ async function loadBootstrap() {
 }
 
 // ── Screenshot Capture ────────────────────────────────────────────────────────
-// captureVisibleTab returns a full-resolution PNG scaled by devicePixelRatio.
-// e.g. on a 2x Retina screen, a CSS rect of {x:0, y:0, w:400, h:200}
-// maps to physical pixels {x:0, y:0, w:800, h:400} in the captured image.
-// We must multiply all crop coords by DPR to get the correct slice.
+// IMPORTANT: captureVisibleTab MUST be called from the background service worker,
+// NOT from the popup. When called from the popup it captures the popup UI itself.
+// Flow: popup asks content script for the rect -> popup sends rect to background
+// -> background calls captureVisibleTab + crops -> returns dataUrl to popup.
 async function captureSectionScreenshot(sectionId) {
   try {
     const tab = await getActiveTab();
 
-    // Get rect + scroll + devicePixelRatio from the content script
+    // 1. Get the section's viewport rect + DPR from the content script
     const response = await sendToContent({ type: "GET_SECTION_RECT", sectionId });
     if (!response?.rect) return null;
 
-    const { rect, dpr = 1 } = response.rect;
+    // response.rect is the full payload: { rect, dpr, viewportWidth, viewportHeight, scrollX, scrollY }
+    const { rect, dpr = 1, viewportWidth, viewportHeight } = response.rect;
 
-    // Clamp rect to viewport bounds (section may extend beyond visible area)
-    const vpW = response.rect.viewportWidth  || 99999;
-    const vpH = response.rect.viewportHeight || 99999;
-    const cssX = Math.max(0, rect.x);
-    const cssY = Math.max(0, rect.y);
-    const cssW = Math.min(rect.width,  vpW - cssX);
-    const cssH = Math.min(rect.height, vpH - cssY);
-
-    if (cssW <= 0 || cssH <= 0) return null;
-
-    // Scale CSS coords → physical pixel coords for cropping
-    const px = Math.round(cssX * dpr);
-    const py = Math.round(cssY * dpr);
-    const pw = Math.round(cssW * dpr);
-    const ph = Math.round(cssH * dpr);
-
-    // captureVisibleTab captures current viewport at full physical resolution
-    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
-
-    const img = await new Promise((resolve, reject) => {
-      const i = new Image();
-      i.onload = () => resolve(i);
-      i.onerror = reject;
-      i.src = dataUrl;
+    // 2. Delegate the actual capture + crop to the background service worker
+    const bgResponse = await chrome.runtime.sendMessage({
+      type: "CAPTURE_SCREENSHOT",
+      tabId: tab.id,
+      windowId: tab.windowId,
+      rect,
+      dpr,
+      viewportWidth,
+      viewportHeight,
     });
 
-    // Guard against crop going out of image bounds
-    const safePW = Math.min(pw, img.naturalWidth  - px);
-    const safePH = Math.min(ph, img.naturalHeight - py);
-    if (safePW <= 0 || safePH <= 0) return null;
-
-    // Draw at CSS size (divide back by DPR) so the saved PNG isn't huge
-    const canvas = document.createElement("canvas");
-    canvas.width  = Math.round(safePW / dpr);
-    canvas.height = Math.round(safePH / dpr);
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, px, py, safePW, safePH, 0, 0, canvas.width, canvas.height);
-
-    return canvas.toDataURL("image/png");
+    return bgResponse?.screenshot || null;
   } catch (err) {
     console.warn("DesignVault: screenshot capture failed", err);
     return null;
   }
 }
-
 // ── Scan ──────────────────────────────────────────────────────────────────────
 async function scanPage() {
   const tab = await getActiveTab();

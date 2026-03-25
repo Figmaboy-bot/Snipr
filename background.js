@@ -33,11 +33,73 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
+// ── Screenshot helper ─────────────────────────────────────────────────────────
+// Must run in the background service worker — captureVisibleTab called from the
+// popup captures the popup itself, not the page. From the background it always
+// captures the active tab's web content.
+
+async function captureAndCrop(tabId, windowId, rect, dpr, viewportWidth, viewportHeight) {
+  try {
+    // Capture the visible tab (returns full-res PNG at devicePixelRatio scale)
+    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
+
+    // Decode via OffscreenCanvas (available in MV3 service workers)
+    const resp   = await fetch(dataUrl);
+    const blob   = await resp.blob();
+    const bitmap = await createImageBitmap(blob);
+
+    // Clamp CSS rect to viewport
+    const vpW  = viewportWidth  || bitmap.width  / dpr;
+    const vpH  = viewportHeight || bitmap.height / dpr;
+    const cssX = Math.max(0, rect.x);
+    const cssY = Math.max(0, rect.y);
+    const cssW = Math.min(rect.width,  vpW - cssX);
+    const cssH = Math.min(rect.height, vpH - cssY);
+
+    if (cssW <= 0 || cssH <= 0) return null;
+
+    // Scale to physical pixels
+    const px = Math.round(cssX * dpr);
+    const py = Math.round(cssY * dpr);
+    const pw = Math.min(Math.round(cssW * dpr), bitmap.width  - px);
+    const ph = Math.min(Math.round(cssH * dpr), bitmap.height - py);
+
+    if (pw <= 0 || ph <= 0) return null;
+
+    // Draw cropped region onto an OffscreenCanvas at CSS size
+    const canvas = new OffscreenCanvas(Math.round(pw / dpr), Math.round(ph / dpr));
+    const ctx    = canvas.getContext("2d");
+    ctx.drawImage(bitmap, px, py, pw, ph, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+
+    const outBlob = await canvas.convertToBlob({ type: "image/png" });
+
+    // Convert blob → base64 data URL
+    return await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(outBlob);
+    });
+  } catch (err) {
+    console.warn("DesignVault: background screenshot failed", err);
+    return null;
+  }
+}
+
 // ── Message Handlers ──────────────────────────────────────────────────────────
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     switch (message.type) {
+
+      // ── Screenshot ─────────────────────────────────────────────────────────
+
+      case "CAPTURE_SCREENSHOT": {
+        const { tabId, windowId, rect, dpr, viewportWidth, viewportHeight } = message;
+        const screenshot = await captureAndCrop(tabId, windowId, rect, dpr, viewportWidth, viewportHeight);
+        sendResponse({ screenshot });
+        break;
+      }
 
       // ── Saves ──────────────────────────────────────────────────────────────
 
