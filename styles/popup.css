@@ -815,3 +815,34 @@ body {
 .btn-danger-sm:hover {
   background: rgba(224, 92, 92, 0.12) !important;
 }
+
+/* Detail View Tabs */
+#detail-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-color);
+  padding: 12px;
+  background: var(--bg-secondary);
+  margin: -12px -12px 12px -12px;
+}
+
+.detail-tab {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.detail-tab:hover {
+  color: var(--text-color);
+}
+
+.detail-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}

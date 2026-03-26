@@ -82,6 +82,20 @@
   let overlayActive = false;
   const highlightedEls = new Set();
 
+  // Clean injected overlay artifacts from saved HTML.
+  // Without this, the saved snippet would include the `dv-badge` overlay nodes.
+  function getCleanOuterHTML(el) {
+    try {
+      const clone = el.cloneNode(true);
+      const badges = clone.querySelectorAll(".dv-badge");
+      badges.forEach(b => b.remove());
+      return clone.outerHTML;
+    } catch (_e) {
+      // Fallback: best-effort; never block saving.
+      return el.outerHTML;
+    }
+  }
+
   function createBadge(label) {
     const badge = document.createElement("div");
     badge.className = "dv-badge";
@@ -157,7 +171,7 @@
       .map(s => ({
         id: s.id,
         label: s.label,
-        html: s.el.outerHTML,
+        html: getCleanOuterHTML(s.el),
         url: window.location.href,
         title: document.title,
         timestamp: Date.now(),
@@ -210,15 +224,18 @@
           console.log("GET_SECTIONS - detecting sections");
           const sections = detectSections();
           console.log("Detected", sections.length, "sections");
+
+          // Build the payload before overlay injection so `html` doesn't include overlay UI.
+          const payloadSections = sections.map(s => ({
+            id: s.id,
+            label: s.label,
+            url: window.location.href,
+            title: document.title,
+            html: getCleanOuterHTML(s.el),
+          }));
+
           activateOverlay(sections);
-          sendResponse({
-            sections: sections.map(s => ({
-              id: s.id,
-              label: s.label,
-              url: window.location.href,
-              title: document.title,
-            })),
-          });
+          sendResponse({ sections: payloadSections });
           break;
         }
 

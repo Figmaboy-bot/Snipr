@@ -152,6 +152,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
       }
 
+      case "UPDATE_SAVE": {
+        const { saveId, patch } = message;
+        if (!saveId || !patch || typeof patch !== "object") {
+          sendResponse({ ok: false, error: "Missing saveId/patch" });
+          break;
+        }
+
+        const { saves = [] } = await chrome.storage.local.get("saves");
+        const idx = saves.findIndex(s => s.id === saveId);
+        if (idx === -1) {
+          sendResponse({ ok: false, error: "Save not found" });
+          break;
+        }
+
+        saves[idx] = { ...saves[idx], ...patch };
+        await chrome.storage.local.set({ saves });
+        sendResponse({ ok: true, save: saves[idx] });
+        break;
+      }
+
       // ── Folders ────────────────────────────────────────────────────────────
 
       case "GET_FOLDERS": {

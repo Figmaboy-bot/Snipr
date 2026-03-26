@@ -51,6 +51,17 @@ function showToast(msg, type = "success") {
   setTimeout(() => t.classList.add("hidden"), 2200);
 }
 
+function normalizeUrlForCompare(url) {
+  try {
+    const u = new URL(url);
+    // Ignore hash; it's often client-side routing noise.
+    u.hash = "";
+    return u.toString();
+  } catch (_e) {
+    return url || "";
+  }
+}
+
 // ── Load bootstrap data ───────────────────────────────────────────────────────
 async function loadBootstrap() {
   const [fRes, cRes] = await Promise.all([
@@ -420,8 +431,23 @@ function openDetailView(save) {
 
   const folder = state.folders.find(f => f.id === save.folderId);
 
-  $("detail-title").textContent = save.label;
+  // ── Tabs ─────────────────────────────────────────────────────────────────
+  const detailTabs = $("detail-tabs");
+  detailTabs.innerHTML = `
+    <div class="detail-tab" data-tab="image">📷 Image</div>
+    <div class="detail-tab" data-tab="code">{'</>'} Code</div>
+    <div class="detail-tab" data-tab="details">ℹ️ Details</div>
+  `;
 
+  // Wire tab switches
+  document.querySelectorAll(".detail-tab").forEach(tab => {
+    tab.addEventListener("click", () => switchDetailTab(tab.getAttribute("data-tab")));
+  });
+
+  // Set first tab active
+  switchDetailTab("image");
+
+  // ── Image Tab ────────────────────────────────────────────────────────────
   const img = $("detail-screenshot");
   const noShot = $("detail-no-screenshot");
   if (save.screenshot) {
@@ -434,7 +460,182 @@ function openDetailView(save) {
     noShot.style.display = "flex";
   }
 
+  // ── Code Tab ─────────────────────────────────────────────────────────────
+  const codeContainer = $("detail-code-container");
+
+  if (save.html) {
+    const parts = extractCodeParts(save.html);
+    const bundleText = buildCodeBundleText(parts);
+
+    const preStyle = `
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 12px;
+      overflow-x: auto;
+      font-size: 11px;
+      line-height: 1.4;
+      max-height: 260px;
+      overflow-y: auto;
+      margin: 0;
+    `;
+
+    const htmlText = escapeHtml(parts.html);
+    const cssText = escapeHtml(parts.css || "/* (none found) */");
+    const jsText = escapeHtml(parts.js || "/* (none found) */");
+    const extCssText = escapeHtml(parts.externals?.css?.length ? parts.externals.css.join("\n") : "");
+    const extJsText = escapeHtml(parts.externals?.js?.length ? parts.externals.js.join("\n") : "");
+
+    codeContainer.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <span style="font-size: 12px; font-weight: 600; color: var(--muted);">Code Bundle</span>
+        <button id="btn-copy-code" style="
+          background: var(--accent);
+          color: white;
+          border: none;
+          padding: 6px 14px;
+          border-radius: 4px;
+          font-size: 12px;
+          cursor: pointer;
+          font-weight: 500;
+        ">Copy Bundle</button>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div>
+          <div style="font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px;">HTML</div>
+          <pre style="${preStyle}"><code>${htmlText}</code></pre>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px;">CSS</div>
+          <pre style="${preStyle}"><code>${cssText}</code></pre>
+          ${parts.externals?.css?.length ? `<div style="margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--muted);">External CSS URLs</div><pre style="${preStyle}"><code>${extCssText}</code></pre>` : ``}
+        </div>
+
+        <div>
+          <div style="font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px;">JavaScript</div>
+          <pre style="${preStyle}"><code>${jsText}</code></pre>
+          ${parts.externals?.js?.length ? `<div style="margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--muted);">External JS URLs</div><pre style="${preStyle}"><code>${extJsText}</code></pre>` : ``}
+        </div>
+      </div>
+    `;
+
+    const copyBtn = $("btn-copy-code");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(bundleText);
+          const originalText = copyBtn.textContent;
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => {
+            copyBtn.textContent = originalText;
+          }, 2000);
+          showToast("Code bundle copied");
+        } catch (err) {
+          console.error("Failed to copy:", err);
+          showToast("Failed to copy bundle", "error");
+        }
+      });
+    }
+  } else {
+    // If `html` is missing in older saves, offer a best-effort recovery from the current page.
+    codeContainer.innerHTML = `
+      <div style="text-align: center; padding: 20px; color: var(--muted); display: flex; flex-direction: column; gap: 10px; align-items: center;">
+        <div>No section code available for this save.</div>
+        <button id="btn-fetch-code" style="
+          background: var(--bg-secondary);
+          color: var(--text-color);
+          border: 1px solid var(--border-color);
+          padding: 8px 12px;
+          border-radius: 6px;
+          font-size: 12px;
+          cursor: pointer;
+          font-weight: 600;
+        ">Fetch from current page</button>
+        <div id="fetch-code-hint" style="font-size: 11px; color: var(--muted); max-width: 280px;">
+          Open the original page, then click fetch.
+        </div>
+      </div>
+    `;
+
+    const fetchBtn = $("btn-fetch-code");
+    const hintEl = $("fetch-code-hint");
+    if (fetchBtn) {
+      fetchBtn.addEventListener("click", async () => {
+        try {
+          fetchBtn.disabled = true;
+          const originalText = fetchBtn.textContent;
+          fetchBtn.textContent = "Fetching…";
+
+          const tab = await getActiveTab();
+          const activeUrl = normalizeUrlForCompare(tab?.url || "");
+          const savedUrl = normalizeUrlForCompare(save.url || "");
+
+          if (!activeUrl || !savedUrl || activeUrl !== savedUrl) {
+            if (hintEl) hintEl.textContent = "The active tab URL doesn’t match this save. Open the original page and try again.";
+            showToast("Open the original page first", "error");
+            fetchBtn.textContent = originalText;
+            fetchBtn.disabled = false;
+            return;
+          }
+
+          // Ensure content script is injected; if not, inject it and continue.
+          try {
+            await chrome.tabs.sendMessage(tab.id, { type: "PING" });
+          } catch (_e) {
+            await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+            await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ["styles/content.css"] }).catch(() => {});
+          }
+
+          const res = await chrome.tabs.sendMessage(tab.id, { type: "GET_SECTIONS" });
+          const sections = res?.sections || [];
+          const match = sections.find(s => s.label === save.label && s.html);
+
+          if (!match?.html) {
+            if (hintEl) hintEl.textContent = "Couldn’t find a matching section on the current page. Try re-scanning or choose a different section.";
+            showToast("Could not find section code", "error");
+            fetchBtn.textContent = originalText;
+            fetchBtn.disabled = false;
+            return;
+          }
+
+          const upd = await chrome.runtime.sendMessage({
+            type: "UPDATE_SAVE",
+            saveId: save.id,
+            patch: { html: match.html },
+          });
+
+          if (!upd?.ok || !upd?.save?.html) {
+            showToast("Failed to update saved code", "error");
+            fetchBtn.textContent = originalText;
+            fetchBtn.disabled = false;
+            return;
+          }
+
+          // Re-render detail view with updated save object.
+          openDetailView(upd.save);
+          switchDetailTab("code");
+          showToast("Section code recovered");
+        } catch (err) {
+          console.error("Fetch code failed:", err);
+          showToast("Failed to fetch code", "error");
+          try {
+            const btn = $("btn-fetch-code");
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = "Fetch from current page";
+            }
+          } catch (_e2) {}
+        }
+      });
+    }
+  }
+
+  // ── Details Tab ──────────────────────────────────────────────────────────
+  $("detail-title").textContent = save.label;
   $("detail-folder").textContent = folder ? `${folder.icon} ${folder.name}` : "—";
+  
   const urlEl = $("detail-url");
   urlEl.href = save.url;
   urlEl.textContent = save.url;
@@ -459,6 +660,108 @@ function openDetailView(save) {
   }
 
   showView("detail");
+}
+
+// ── Switch Detail Tabs ───────────────────────────────────────────────────────
+function switchDetailTab(tabName) {
+  // Update tab buttons
+  document.querySelectorAll(".detail-tab").forEach(tab => {
+    tab.classList.toggle("active", tab.getAttribute("data-tab") === tabName);
+  });
+
+  // Update tab content
+  $("detail-image-tab").style.display = tabName === "image" ? "flex" : "none";
+  $("detail-code-tab").style.display = tabName === "code" ? "block" : "none";
+  $("detail-info-tab").style.display = tabName === "details" ? "block" : "none";
+}
+
+// ── Helper: Escape HTML for display ───────────────────────────────────────────
+function escapeHtml(text) {
+  const map = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  };
+  return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+// Extract inline CSS/JS (and external asset URLs) from an element's saved HTML.
+// Note: we can only extract code that exists in the DOM (inline <style>/<script> and their src/href URLs).
+function extractCodeParts(sectionHtml) {
+  const parts = {
+    html: sectionHtml || "",
+    css: "",
+    js: "",
+    externals: { css: [], js: [] },
+  };
+
+  if (!sectionHtml) return parts;
+
+  try {
+    const doc = new DOMParser().parseFromString(sectionHtml, "text/html");
+
+    const cssStyles = Array.from(doc.querySelectorAll("style"));
+    parts.css = cssStyles
+      .map(s => (s.textContent || "").trim())
+      .filter(Boolean)
+      .join("\n\n");
+
+    const scriptEls = Array.from(doc.querySelectorAll("script"));
+    const jsChunks = [];
+    scriptEls.forEach(s => {
+      const src = s.getAttribute("src");
+      if (src) {
+        parts.externals.js.push(src);
+        jsChunks.push(`// Script src: ${src}`);
+      }
+
+      const inline = (s.textContent || "").trim();
+      if (inline) jsChunks.push(inline);
+    });
+    parts.js = jsChunks.join("\n\n").trim();
+
+    const linkEls = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'));
+    linkEls.forEach(l => {
+      const href = l.getAttribute("href");
+      if (href) parts.externals.css.push(href);
+    });
+  } catch (_e) {
+    // Best-effort extraction only.
+  }
+
+  return parts;
+}
+
+function buildCodeBundleText(parts) {
+  const html = parts.html || "";
+  const css = parts.css || "";
+  const js = parts.js || "";
+  const extCss = parts.externals?.css?.length ? parts.externals.css.join("\n") : "";
+  const extJs = parts.externals?.js?.length ? parts.externals.js.join("\n") : "";
+
+  const lines = [];
+  lines.push("/* ================= HTML ================= */");
+  lines.push(html);
+
+  lines.push("\n/* ================= CSS (inline <style>) ================= */");
+  lines.push(css || "/* (none found) */");
+
+  if (extCss) {
+    lines.push("\n/* ================= CSS (external <link rel=stylesheet>) ================= */");
+    lines.push(extCss);
+  }
+
+  lines.push("\n/* ================= JS (inline <script>) ================= */");
+  lines.push(js || "/* (none found) */");
+
+  if (extJs) {
+    lines.push("\n/* ================= JS (external <script src>) ================= */");
+    lines.push(extJs);
+  }
+
+  return lines.join("\n");
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────

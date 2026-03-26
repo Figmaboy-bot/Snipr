@@ -88,45 +88,56 @@
       </div>
     </div>
 
-    <!-- DETAIL VIEW -->
-    <div id="view-detail" class="view">
-      <div class="library-header">
-        <button id="btn-back-detail" class="link-btn">← Back</button>
-        <h2 class="view-title" id="detail-title">Section</h2>
-        <button id="btn-delete-detail" class="btn-ghost-sm btn-danger-sm">Delete</button>
-      </div>
+<!-- Detail View -->
+<div id="view-detail" class="view" style="flex-direction: column; padding: 12px;">
+  <!-- Back and Delete buttons -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+    <button id="btn-back-detail">← Back</button>
+    <h3 id="detail-title" style="margin: 0; flex: 1; text-align: center;"></h3>
+    <button id="btn-delete-detail" style="background: #d32f2f; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Delete</button>
+  </div>
 
-      <div id="detail-screenshot-wrap" class="detail-screenshot-wrap">
-        <img id="detail-screenshot" class="detail-screenshot" src="" alt="Section screenshot" />
-        <div id="detail-no-screenshot" class="detail-no-screenshot hidden">
-          <span>📷</span>
-          <p>No screenshot available</p>
-        </div>
-      </div>
+  <!-- Tabs -->
+  <div id="detail-tabs" style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding: 0 0 12px 0; margin-bottom: 12px;"></div>
 
-      <div class="detail-meta">
-        <div class="detail-meta-row">
-          <span class="detail-meta-label">📁 Folder</span>
-          <span id="detail-folder" class="detail-meta-value">—</span>
-        </div>
-        <div class="detail-meta-row">
-          <span class="detail-meta-label">🔗 Source</span>
-          <a id="detail-url" class="detail-meta-value detail-link" href="#" target="_blank">—</a>
-        </div>
-        <div class="detail-meta-row">
-          <span class="detail-meta-label">📅 Saved</span>
-          <span id="detail-date" class="detail-meta-value">—</span>
-        </div>
-        <div id="detail-categories-row" class="detail-meta-row">
-          <span class="detail-meta-label">🏷 Tags</span>
-          <div id="detail-categories" class="detail-meta-value chip-group-sm"></div>
-        </div>
-        <div id="detail-note-row" class="detail-meta-row hidden">
-          <span class="detail-meta-label">📝 Note</span>
-          <span id="detail-note" class="detail-meta-value detail-note-text">—</span>
-        </div>
-      </div>
+  <!-- Tab Content - Image -->
+  <div id="detail-image-tab" style="flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center;">
+    <img id="detail-screenshot" alt="Screenshot" style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px;">
+    <div id="detail-no-screenshot" style="display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted);">
+      <span style="font-size: 48px;">📷</span>
+      <span>No screenshot available</span>
     </div>
+  </div>
+
+  <!-- Tab Content - Code -->
+  <div id="detail-code-tab" style="flex: 1; overflow: auto; display: none;">
+    <div id="detail-code-container"></div>
+  </div>
+
+  <!-- Tab Content - Details -->
+  <div id="detail-info-tab" style="flex: 1; overflow: auto; display: none; padding: 12px 0;">
+    <div class="detail-row">
+      <span style="display: flex; align-items: center; gap: 6px;"><span>📁</span> Folder</span>
+      <span id="detail-folder">—</span>
+    </div>
+    <div class="detail-row">
+      <span style="display: flex; align-items: center; gap: 6px;"><span>🔗</span> Source</span>
+      <a id="detail-url" href="#" target="_blank" style="color: var(--accent); text-decoration: none; word-break: break-all;"></a>
+    </div>
+    <div class="detail-row">
+      <span style="display: flex; align-items: center; gap: 6px;"><span>📅</span> Saved</span>
+      <span id="detail-date"></span>
+    </div>
+    <div class="detail-row" id="detail-categories-row" style="display: none;">
+      <span style="display: flex; align-items: center; gap: 6px;"><span>🏷️</span> Tags</span>
+      <div id="detail-categories"></div>
+    </div>
+    <div class="detail-row" id="detail-note-row" style="display: none;">
+      <span style="display: flex; align-items: center; gap: 6px;"><span>📝</span> Note</span>
+      <span id="detail-note" style="font-size: 12px; color: var(--muted);"></span>
+    </div>
+  </div>
+</div>
 
     <!-- SETTINGS VIEW -->
     <div id="view-settings" class="view">
