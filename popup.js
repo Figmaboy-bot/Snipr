@@ -10,8 +10,8 @@ const state = {
   categories: [],
   libraryFolderFilter: null,
   libraryCategoryFilter: "",
-  detailSave: null,         // the save object currently shown in detail view
-  detailFromView: "library", // which view to return to from detail
+  detailSave: null,
+  detailFromView: "library",
 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
@@ -62,22 +62,48 @@ async function loadBootstrap() {
 }
 
 // ── Screenshot Capture ────────────────────────────────────────────────────────
-// IMPORTANT: captureVisibleTab MUST be called from the background service worker,
-// NOT from the popup. When called from the popup it captures the popup UI itself.
-// Flow: popup asks content script for the rect -> popup sends rect to background
-// -> background calls captureVisibleTab + crops -> returns dataUrl to popup.
 async function captureSectionScreenshot(sectionId) {
   try {
     const tab = await getActiveTab();
+    console.log("Capturing screenshot for tab:", tab.id, "section:", sectionId);
 
-    // 1. Get the section's viewport rect + DPR from the content script
-    const response = await sendToContent({ type: "GET_SECTION_RECT", sectionId });
-    if (!response?.rect) return null;
+    // FIRST: Ensure content script is injected and ready
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: "PING" });
+      console.log("Content script is ready");
+    } catch (e) {
+      console.log("Content script not ready, injecting...");
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["content.js"],
+      });
+      await chrome.scripting.insertCSS({
+        target: { tabId: tab.id },
+        files: ["styles/content.css"],
+      }).catch(() => {});
+      
+      // Re-scan to populate sections in content script
+      console.log("Re-scanning page to populate sections");
+      const scanRes = await chrome.tabs.sendMessage(tab.id, { type: "GET_SECTIONS" });
+      console.log("Scan result:", scanRes);
+    }
 
-    // response.rect is the full payload: { rect, dpr, viewportWidth, viewportHeight, scrollX, scrollY }
+    // Now get the rect
+    console.log("Requesting section rect...");
+    const response = await chrome.tabs.sendMessage(tab.id, { 
+      type: "GET_SECTION_RECT", 
+      sectionId 
+    });
+    console.log("GET_SECTION_RECT response:", response);
+    
+    if (!response?.rect) {
+      console.error("No rect found in response");
+      return null;
+    }
+
     const { rect, dpr = 1, viewportWidth, viewportHeight } = response.rect;
+    console.log("Rect data:", { rect, dpr, viewportWidth, viewportHeight });
 
-    // 2. Delegate the actual capture + crop to the background service worker
     const bgResponse = await chrome.runtime.sendMessage({
       type: "CAPTURE_SCREENSHOT",
       tabId: tab.id,
@@ -88,18 +114,19 @@ async function captureSectionScreenshot(sectionId) {
       viewportHeight,
     });
 
+    console.log("Background screenshot response:", bgResponse);
     return bgResponse?.screenshot || null;
   } catch (err) {
-    console.warn("DesignVault: screenshot capture failed", err);
+    console.error("DesignVault: screenshot capture failed", err);
     return null;
   }
 }
+
 // ── Scan ──────────────────────────────────────────────────────────────────────
 async function scanPage() {
   const tab = await getActiveTab();
   $("page-title").textContent = tab.title || tab.url;
 
-  // Ensure content script is injected
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
@@ -226,44 +253,66 @@ async function saveSelectedSections() {
   if (!state.selectedSections.length) return showToast("Select at least one section", "error");
   if (!state.selectedFolderId) return showToast("Pick a folder first", "error");
 
-  // Show progress feedback while capturing screenshots
   const saveBtn = $("btn-save");
+  const originalText = saveBtn.textContent;
   saveBtn.textContent = "Capturing…";
   saveBtn.disabled = true;
 
-  // Capture a screenshot for each selected section
-  const sectionsWithScreenshots = await Promise.all(
-    state.selectedSections.map(async (section) => {
-      const screenshot = await captureSectionScreenshot(section.id);
-      return { ...section, screenshot };
-    })
-  );
+  try {
+    const sectionsWithScreenshots = await Promise.all(
+      state.selectedSections.map(async (section) => {
+        try {
+          console.log("Processing section:", section.id, section.label);
+          const screenshot = await captureSectionScreenshot(section.id);
+          console.log("Screenshot result for", section.id, ":", screenshot ? "success" : "null");
+          
+          return {
+            ...section,
+            screenshot: screenshot,
+          };
+        } catch (err) {
+          console.error(`Error capturing section ${section.id}:`, err);
+          return { ...section, screenshot: null };
+        }
+      })
+    );
 
-  saveBtn.textContent = "Saving…";
+    console.log("Sections with screenshots:", sectionsWithScreenshots);
 
-  const res = await chrome.runtime.sendMessage({
-    type: "SAVE_SECTIONS",
-    sections: sectionsWithScreenshots,
-    folderId: state.selectedFolderId,
-    categories: [...state.selectedCategories],
-    note: $("note-input").value.trim(),
-  });
+    saveBtn.textContent = "Saving…";
 
-  saveBtn.textContent = "Save to Vault ⬡";
-  saveBtn.disabled = false;
+    const res = await chrome.runtime.sendMessage({
+      type: "SAVE_SECTIONS",
+      sections: sectionsWithScreenshots,
+      folderId: state.selectedFolderId,
+      categories: [...state.selectedCategories],
+      note: $("note-input").value.trim(),
+    });
 
-  if (res.ok) {
-    showToast(`✓ Saved ${res.saved} section${res.saved !== 1 ? "s" : ""}!`);
-    state.selectedSections = [];
-    state.selectedCategories.clear();
-    $("note-input").value = "";
-    syncListSelection();
-    updateSavePanel();
-    // Deactivate overlay
-    sendToContent({ type: "DEACTIVATE_OVERLAY" }).catch(() => {});
-    $("sections-list").classList.add("hidden");
-    $("section-count").textContent = "0 sections found";
-    $("empty-state").classList.remove("hidden");
+    console.log("Save response:", res);
+
+    saveBtn.textContent = originalText;
+    saveBtn.disabled = false;
+
+    if (res.ok) {
+      showToast(`✓ Saved ${res.saved} section${res.saved !== 1 ? "s" : ""}!`);
+      state.selectedSections = [];
+      state.selectedCategories.clear();
+      $("note-input").value = "";
+      syncListSelection();
+      updateSavePanel();
+      sendToContent({ type: "DEACTIVATE_OVERLAY" }).catch(() => {});
+      $("sections-list").classList.add("hidden");
+      $("section-count").textContent = "0 sections found";
+      $("empty-state").classList.remove("hidden");
+    } else {
+      showToast("Failed to save sections", "error");
+    }
+  } catch (err) {
+    console.error("Save failed:", err);
+    showToast("Error saving sections", "error");
+    saveBtn.textContent = originalText;
+    saveBtn.disabled = false;
   }
 }
 
@@ -327,7 +376,6 @@ function renderLibrary(saves) {
     const card = document.createElement("div");
     card.className = "save-card";
 
-    // Screenshot thumbnail if available
     const thumbHtml = save.screenshot
       ? `<div class="save-card-thumb"><img src="${save.screenshot}" alt="${save.label}" /></div>`
       : `<div class="save-card-thumb save-card-thumb--empty"><span>📷</span></div>`;
@@ -350,7 +398,6 @@ function renderLibrary(saves) {
       </div>
     `;
 
-    // Click anywhere on card body (except delete btn) → open detail view
     card.addEventListener("click", (e) => {
       if (e.target.classList.contains("delete-btn")) return;
       if (e.target.closest("a")) return;
@@ -373,10 +420,8 @@ function openDetailView(save) {
 
   const folder = state.folders.find(f => f.id === save.folderId);
 
-  // Title
   $("detail-title").textContent = save.label;
 
-  // Screenshot — use display style directly to avoid CSS specificity fights
   const img = $("detail-screenshot");
   const noShot = $("detail-no-screenshot");
   if (save.screenshot) {
@@ -389,7 +434,6 @@ function openDetailView(save) {
     noShot.style.display = "flex";
   }
 
-  // Metadata
   $("detail-folder").textContent = folder ? `${folder.icon} ${folder.name}` : "—";
   const urlEl = $("detail-url");
   urlEl.href = save.url;
@@ -397,7 +441,6 @@ function openDetailView(save) {
 
   $("detail-date").textContent = new Date(save.savedAt).toLocaleString();
 
-  // Categories
   const catsEl = $("detail-categories");
   const catsRow = $("detail-categories-row");
   if (save.categories?.length) {
@@ -407,7 +450,6 @@ function openDetailView(save) {
     catsRow.classList.add("hidden");
   }
 
-  // Note
   const noteRow = $("detail-note-row");
   if (save.note) {
     $("detail-note").textContent = save.note;
@@ -467,10 +509,8 @@ async function exportVault() {
 
 // ── Event Wiring ──────────────────────────────────────────────────────────────
 function wireEvents() {
-  // Scan
   $("btn-scan").addEventListener("click", scanPage);
 
-  // Clear selection
   $("btn-clear-selection").addEventListener("click", () => {
     state.selectedSections = [];
     state.selectedCategories.clear();
@@ -480,10 +520,8 @@ function wireEvents() {
     scanPage();
   });
 
-  // Save
   $("btn-save").addEventListener("click", saveSelectedSections);
 
-  // Add category inline
   $("btn-add-category").addEventListener("click", async () => {
     const val = $("new-category-input").value.trim();
     if (!val) return;
@@ -496,7 +534,6 @@ function wireEvents() {
     if (e.key === "Enter") $("btn-add-category").click();
   });
 
-  // Library
   $("btn-library").addEventListener("click", async () => {
     await loadBootstrap();
     await loadLibrary();
@@ -512,13 +549,11 @@ function wireEvents() {
     loadLibrary();
   });
 
-  // Detail view — back button returns to library
   $("btn-back-detail").addEventListener("click", async () => {
     await loadLibrary();
     showView("library");
   });
 
-  // Detail view — delete button
   $("btn-delete-detail").addEventListener("click", async () => {
     if (!state.detailSave) return;
     await chrome.runtime.sendMessage({ type: "DELETE_SAVE", saveId: state.detailSave.id });
@@ -528,7 +563,6 @@ function wireEvents() {
     showToast("Section deleted");
   });
 
-  // Settings
   $("btn-settings").addEventListener("click", async () => {
     await loadBootstrap();
     renderFolderManager();
@@ -555,7 +589,6 @@ function wireEvents() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async () => {
-  // Init all views as hidden except capture
   Object.entries(views).forEach(([key, el]) => {
     el.style.display = key === "capture" ? "flex" : "none";
   });
@@ -563,7 +596,6 @@ function wireEvents() {
   await loadBootstrap();
   wireEvents();
 
-  // Auto-scan on open
   const tab = await getActiveTab();
   if (tab?.url && !tab.url.startsWith("chrome://")) {
     $("page-title").textContent = tab.title || tab.url;

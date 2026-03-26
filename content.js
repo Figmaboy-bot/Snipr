@@ -11,13 +11,12 @@
     { tag: "header",  label: "Header" },
     { tag: "nav",     label: "Navbar" },
     { tag: "footer",  label: "Footer" },
-    { tag: "hero",    label: "Hero" },      // custom tag fallback
+    { tag: "hero",    label: "Hero" },
     { tag: "section", label: "Section" },
     { tag: "main",    label: "Main" },
     { tag: "aside",   label: "Sidebar" },
   ];
 
-  // Class/id hints that help label a section
   const HINT_MAP = [
     { pattern: /hero/i,        label: "Hero" },
     { pattern: /banner/i,      label: "Banner" },
@@ -52,7 +51,6 @@
     const selectors = SECTION_SELECTORS.map(s => s.tag).join(", ");
     const rawEls = Array.from(document.querySelectorAll(selectors));
 
-    // Also grab divs that have section-y class/id hints
     const divHints = Array.from(document.querySelectorAll("div[id], div[class]")).filter(el => {
       const combined = (el.id + " " + el.className);
       return HINT_MAP.some(({ pattern }) => pattern.test(combined));
@@ -60,7 +58,6 @@
 
     const all = [...new Set([...rawEls, ...divHints])];
 
-    // Filter: must be visible and reasonably sized
     return all
       .filter(el => {
         const rect = el.getBoundingClientRect();
@@ -148,7 +145,6 @@
       el.classList.add("dv-selected");
     }
 
-    // Notify popup of selection change
     chrome.runtime.sendMessage({
       type: "SECTION_SELECTION_CHANGED",
       selected: getSelectedSections(),
@@ -168,157 +164,96 @@
       }));
   }
 
-// ── Screenshot Capture ────────────────────────────────────────────────────────
-// IMPORTANT: captureVisibleTab MUST be called from the background service worker,
-// NOT from the popup. When called from the popup it captures the popup UI itself.
-// Flow: popup asks content script for the rect -> popup sends rect to background
-// -> background calls captureVisibleTab + crops -> returns dataUrl to popup.
-async function captureSectionScreenshot(sectionId) {
-  try {
-    const tab = await getActiveTab();
-
-    // Ensure content script is ready
-    try {
-      await chrome.tabs.sendMessage(tab.id, { type: "PING" });
-    } catch (e) {
-      console.warn("Content script not ready, injecting...");
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ["content.js"],
-      });
-    }
-
-    // 1. Get the section's viewport rect + DPR from the content script
-    const response = await chrome.tabs.sendMessage(tab.id, { 
-      type: "GET_SECTION_RECT", 
-      sectionId 
-    });
-    
-    if (!response?.rect) {
-      console.error("Failed to get section rect", response);
+  // ── Screenshot Capture ────────────────────────────────────────────────────────
+  function captureSection(sectionId) {
+    console.log("captureSection called with:", sectionId);
+    const section = detectedSections.find(s => s.id === sectionId);
+    if (!section) {
+      console.error("Section not found:", sectionId, "Available:", detectedSections.map(s => s.id));
       return null;
     }
 
-    // response.rect is the full payload: { rect, dpr, viewportWidth, viewportHeight }
-    const { rect, dpr = 1, viewportWidth, viewportHeight } = response.rect;
+    const domRect = section.el.getBoundingClientRect();
+    console.log("Got domRect:", domRect);
 
-    // 2. Delegate the actual capture + crop to the background service worker
-    const bgResponse = await chrome.runtime.sendMessage({
-      type: "CAPTURE_SCREENSHOT",
-      tabId: tab.id,
-      windowId: tab.windowId,
-      rect,
-      dpr,
-      viewportWidth,
-      viewportHeight,
-    });
-
-    if (!bgResponse?.screenshot) {
-      console.error("Failed to capture screenshot", bgResponse);
-      return null;
-    }
-
-    return bgResponse.screenshot;
-  } catch (err) {
-    console.error("DesignVault: screenshot capture failed", err);
-    return null;
+    const result = {
+      rect: {
+        x: Math.round(domRect.left),
+        y: Math.round(domRect.top),
+        width: Math.round(domRect.width),
+        height: Math.round(domRect.height),
+      },
+      dpr: window.devicePixelRatio || 1,
+      viewportWidth:  window.innerWidth,
+      viewportHeight: window.innerHeight,
+      scrollX: Math.round(window.scrollX),
+      scrollY: Math.round(window.scrollY),
+    };
+    console.log("Returning rect:", result);
+    return result;
   }
-}
-
-// ── Save (with screenshot capture) ───────────────────────────────────────────
-async function saveSelectedSections() {
-  if (!state.selectedSections.length) return showToast("Select at least one section", "error");
-  if (!state.selectedFolderId) return showToast("Pick a folder first", "error");
-
-  // Show progress feedback while capturing screenshots
-  const saveBtn = $("btn-save");
-  const originalText = saveBtn.textContent;
-  saveBtn.textContent = "Capturing…";
-  saveBtn.disabled = true;
-
-  try {
-    // Capture a screenshot for each selected section
-    const sectionsWithScreenshots = await Promise.all(
-      state.selectedSections.map(async (section) => {
-        try {
-          const screenshot = await captureSectionScreenshot(section.id);
-          return { ...section, screenshot };
-        } catch (err) {
-          console.error(`Error capturing section ${section.id}:`, err);
-          return { ...section, screenshot: null };
-        }
-      })
-    );
-
-    saveBtn.textContent = "Saving…";
-
-    const res = await chrome.runtime.sendMessage({
-      type: "SAVE_SECTIONS",
-      sections: sectionsWithScreenshots,
-      folderId: state.selectedFolderId,
-      categories: [...state.selectedCategories],
-      note: $("note-input").value.trim(),
-    });
-
-    if (res.ok) {
-      showToast(`✓ Saved ${res.saved} section${res.saved !== 1 ? "s" : ""}!`);
-      state.selectedSections = [];
-      state.selectedCategories.clear();
-      $("note-input").value = "";
-      syncListSelection();
-      updateSavePanel();
-      // Deactivate overlay
-      sendToContent({ type: "DEACTIVATE_OVERLAY" }).catch(() => {});
-      $("sections-list").classList.add("hidden");
-      $("section-count").textContent = "0 sections found";
-      $("empty-state").classList.remove("hidden");
-    }
-  } catch (err) {
-    console.error("Save failed:", err);
-    showToast("Error saving sections", "error");
-  } finally {
-    saveBtn.textContent = originalText;
-    saveBtn.disabled = false;
-  }
-}
 
   // ── Message Bridge ─────────────────────────────────────────────────────────
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    switch (message.type) {
+    console.log("Content script received message:", message.type, "sectionId:", message.sectionId);
+    
+    try {
+      switch (message.type) {
 
-      case "PING":
-        sendResponse({ ready: true });
-        break;
+        case "PING":
+          console.log("PING - responding ready");
+          sendResponse({ ready: true });
+          break;
 
-      case "GET_SECTIONS": {
-        const sections = detectSections();
-        activateOverlay(sections);
-        sendResponse({
-          sections: sections.map(s => ({
-            id: s.id,
-            label: s.label,
-            url: window.location.href,
-            title: document.title,
-          })),
-        });
-        break;
+        case "GET_SECTIONS": {
+          console.log("GET_SECTIONS - detecting sections");
+          const sections = detectSections();
+          console.log("Detected", sections.length, "sections");
+          activateOverlay(sections);
+          sendResponse({
+            sections: sections.map(s => ({
+              id: s.id,
+              label: s.label,
+              url: window.location.href,
+              title: document.title,
+            })),
+          });
+          break;
+        }
+
+        case "GET_SELECTED_SECTIONS": {
+          console.log("GET_SELECTED_SECTIONS");
+          const selected = getSelectedSections();
+          sendResponse({ selected });
+          break;
+        }
+
+        case "DEACTIVATE_OVERLAY": {
+          console.log("DEACTIVATE_OVERLAY");
+          deactivateOverlay();
+          sendResponse({ ok: true });
+          break;
+        }
+
+        case "GET_SECTION_RECT": {
+          console.log("GET_SECTION_RECT - sectionId:", message.sectionId);
+          const rect = captureSection(message.sectionId);
+          console.log("Captured rect:", rect);
+          sendResponse({ rect });
+          break;
+        }
+
+        default:
+          console.log("Unknown message type:", message.type);
+          sendResponse({ error: "Unknown message type" });
       }
-
-      case "GET_SELECTED_SECTIONS":
-        sendResponse({ selected: getSelectedSections() });
-        break;
-
-      case "DEACTIVATE_OVERLAY":
-        deactivateOverlay();
-        sendResponse({ ok: true });
-        break;
-
-      case "GET_SECTION_RECT":
-        sendResponse({ rect: captureSection(message.sectionId) });
-        break;
+    } catch (err) {
+      console.error("Error in message handler:", err);
+      sendResponse({ error: err.message });
     }
-    return true; // keep channel open for async
+    
+    return true;
   });
 
 })();
