@@ -40,15 +40,22 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 async function captureAndCrop(tabId, windowId, rect, dpr, viewportWidth, viewportHeight) {
   try {
-    // Capture the visible tab (returns full-res PNG at devicePixelRatio scale)
+    // Capture the visible tab — from the service worker this always captures
+    // the web page, never the popup. Returns a base64 PNG data URL.
     const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
 
-    // Decode via OffscreenCanvas (available in MV3 service workers)
-    const resp   = await fetch(dataUrl);
-    const blob   = await resp.blob();
-    const bitmap = await createImageBitmap(blob);
+    // Convert base64 data URL to a Blob without fetch() or FileReader
+    // (both can be unreliable / unavailable in MV3 service workers)
+    const base64 = dataUrl.split(",")[1];
+    const binary  = atob(base64);
+    const bytes   = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const imgBlob = new Blob([bytes], { type: "image/png" });
 
-    // Clamp CSS rect to viewport
+    // createImageBitmap works fine in MV3 service workers
+    const bitmap = await createImageBitmap(imgBlob);
+
+    // Clamp CSS rect to viewport size
     const vpW  = viewportWidth  || bitmap.width  / dpr;
     const vpH  = viewportHeight || bitmap.height / dpr;
     const cssX = Math.max(0, rect.x);
@@ -56,30 +63,32 @@ async function captureAndCrop(tabId, windowId, rect, dpr, viewportWidth, viewpor
     const cssW = Math.min(rect.width,  vpW - cssX);
     const cssH = Math.min(rect.height, vpH - cssY);
 
-    if (cssW <= 0 || cssH <= 0) return null;
+    if (cssW <= 0 || cssH <= 0) { bitmap.close(); return null; }
 
-    // Scale to physical pixels
+    // Scale CSS coords to physical pixels
     const px = Math.round(cssX * dpr);
     const py = Math.round(cssY * dpr);
     const pw = Math.min(Math.round(cssW * dpr), bitmap.width  - px);
     const ph = Math.min(Math.round(cssH * dpr), bitmap.height - py);
 
-    if (pw <= 0 || ph <= 0) return null;
+    if (pw <= 0 || ph <= 0) { bitmap.close(); return null; }
 
-    // Draw cropped region onto an OffscreenCanvas at CSS size
+    // Crop onto OffscreenCanvas at CSS display size
     const canvas = new OffscreenCanvas(Math.round(pw / dpr), Math.round(ph / dpr));
     const ctx    = canvas.getContext("2d");
     ctx.drawImage(bitmap, px, py, pw, ph, 0, 0, canvas.width, canvas.height);
     bitmap.close();
 
+    // convertToBlob works in service workers; FileReader does NOT
     const outBlob = await canvas.convertToBlob({ type: "image/png" });
 
-    // Convert blob → base64 data URL
-    return await new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.readAsDataURL(outBlob);
-    });
+    // Convert Blob to base64 data URL using arrayBuffer (works in service workers)
+    const arrayBuf = await outBlob.arrayBuffer();
+    const outBytes = new Uint8Array(arrayBuf);
+    let outBinary  = "";
+    for (let i = 0; i < outBytes.length; i++) outBinary += String.fromCharCode(outBytes[i]);
+    return "data:image/png;base64," + btoa(outBinary);
+
   } catch (err) {
     console.warn("DesignVault: background screenshot failed", err);
     return null;

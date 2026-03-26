@@ -168,32 +168,119 @@
       }));
   }
 
-  // ── Screenshot capture via canvas ──────────────────────────────────────────
-  // Returns the section's viewport-relative bounding rect, the device pixel
-  // ratio, and viewport dimensions — everything the popup needs to correctly
-  // crop a captureVisibleTab image (which is at physical/DPR resolution).
-  function captureSection(sectionId) {
-    const section = detectedSections.find(s => s.id === sectionId);
-    if (!section) return null;
+// ── Screenshot Capture ────────────────────────────────────────────────────────
+// IMPORTANT: captureVisibleTab MUST be called from the background service worker,
+// NOT from the popup. When called from the popup it captures the popup UI itself.
+// Flow: popup asks content script for the rect -> popup sends rect to background
+// -> background calls captureVisibleTab + crops -> returns dataUrl to popup.
+async function captureSectionScreenshot(sectionId) {
+  try {
+    const tab = await getActiveTab();
 
-    const domRect = section.el.getBoundingClientRect();
+    // Ensure content script is ready
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: "PING" });
+    } catch (e) {
+      console.warn("Content script not ready, injecting...");
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["content.js"],
+      });
+    }
 
-    return {
-      rect: {
-        x: Math.round(domRect.left),
-        y: Math.round(domRect.top),
-        width: Math.round(domRect.width),
-        height: Math.round(domRect.height),
-      },
-      // devicePixelRatio: captureVisibleTab output is scaled by this factor
-      dpr: window.devicePixelRatio || 1,
-      // Viewport size so popup can clamp the crop bounds
-      viewportWidth:  window.innerWidth,
-      viewportHeight: window.innerHeight,
-      scrollX: Math.round(window.scrollX),
-      scrollY: Math.round(window.scrollY),
-    };
+    // 1. Get the section's viewport rect + DPR from the content script
+    const response = await chrome.tabs.sendMessage(tab.id, { 
+      type: "GET_SECTION_RECT", 
+      sectionId 
+    });
+    
+    if (!response?.rect) {
+      console.error("Failed to get section rect", response);
+      return null;
+    }
+
+    // response.rect is the full payload: { rect, dpr, viewportWidth, viewportHeight }
+    const { rect, dpr = 1, viewportWidth, viewportHeight } = response.rect;
+
+    // 2. Delegate the actual capture + crop to the background service worker
+    const bgResponse = await chrome.runtime.sendMessage({
+      type: "CAPTURE_SCREENSHOT",
+      tabId: tab.id,
+      windowId: tab.windowId,
+      rect,
+      dpr,
+      viewportWidth,
+      viewportHeight,
+    });
+
+    if (!bgResponse?.screenshot) {
+      console.error("Failed to capture screenshot", bgResponse);
+      return null;
+    }
+
+    return bgResponse.screenshot;
+  } catch (err) {
+    console.error("DesignVault: screenshot capture failed", err);
+    return null;
   }
+}
+
+// ── Save (with screenshot capture) ───────────────────────────────────────────
+async function saveSelectedSections() {
+  if (!state.selectedSections.length) return showToast("Select at least one section", "error");
+  if (!state.selectedFolderId) return showToast("Pick a folder first", "error");
+
+  // Show progress feedback while capturing screenshots
+  const saveBtn = $("btn-save");
+  const originalText = saveBtn.textContent;
+  saveBtn.textContent = "Capturing…";
+  saveBtn.disabled = true;
+
+  try {
+    // Capture a screenshot for each selected section
+    const sectionsWithScreenshots = await Promise.all(
+      state.selectedSections.map(async (section) => {
+        try {
+          const screenshot = await captureSectionScreenshot(section.id);
+          return { ...section, screenshot };
+        } catch (err) {
+          console.error(`Error capturing section ${section.id}:`, err);
+          return { ...section, screenshot: null };
+        }
+      })
+    );
+
+    saveBtn.textContent = "Saving…";
+
+    const res = await chrome.runtime.sendMessage({
+      type: "SAVE_SECTIONS",
+      sections: sectionsWithScreenshots,
+      folderId: state.selectedFolderId,
+      categories: [...state.selectedCategories],
+      note: $("note-input").value.trim(),
+    });
+
+    if (res.ok) {
+      showToast(`✓ Saved ${res.saved} section${res.saved !== 1 ? "s" : ""}!`);
+      state.selectedSections = [];
+      state.selectedCategories.clear();
+      $("note-input").value = "";
+      syncListSelection();
+      updateSavePanel();
+      // Deactivate overlay
+      sendToContent({ type: "DEACTIVATE_OVERLAY" }).catch(() => {});
+      $("sections-list").classList.add("hidden");
+      $("section-count").textContent = "0 sections found";
+      $("empty-state").classList.remove("hidden");
+    }
+  } catch (err) {
+    console.error("Save failed:", err);
+    showToast("Error saving sections", "error");
+  } finally {
+    saveBtn.textContent = originalText;
+    saveBtn.disabled = false;
+  }
+}
 
   // ── Message Bridge ─────────────────────────────────────────────────────────
 
