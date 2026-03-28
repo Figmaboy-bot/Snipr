@@ -12,15 +12,30 @@ A Chrome extension to capture and organize website sections by design type and i
 
 ## Installation
 
-1. Open Chrome and go to `chrome://extensions`
-2. Enable **Developer mode** (toggle top-right)
-3. Click **Load unpacked**
-4. Select the `design-vault` folder
+1. **Configure Firebase (required for sign-in)**  
+   - Create a [Firebase](https://console.firebase.google.com/) project and add a **Web** app.  
+   - In **Authentication → Sign-in method**, enable **Email/Password** and **Google**.  
+   - Copy your web app config into `firebase-config.js` (see `firebase-config.example.js`).  
+   - For **Google sign-in from the extension**, create an **OAuth 2.0 Client ID** of type **Chrome extension** in [Google Cloud Console](https://console.cloud.google.com/apis/credentials), using your extension’s ID from `chrome://extensions` → Snpr → **Details**.  
+   - Put that client ID in `manifest.json` under `oauth2.client_id` (replace `YOUR_EXTENSION_OAUTH_CLIENT_ID.apps.googleusercontent.com`).
+
+2. **Build the auth bundle** (after `npm install` or when you change `auth/firebase-auth.js` or `firebase-config.js`):  
+   ```bash
+   npm install
+   npm run build:auth
+   ```  
+   This produces `auth/firebase-auth.bundle.js`, which the popup loads for Firebase Auth.
+
+3. Open Chrome and go to `chrome://extensions`
+4. Enable **Developer mode** (toggle top-right)
+5. Click **Load unpacked**
+6. Select this project folder
 
 ## Usage
 
-1. Navigate to any website
-2. Click the DesignVault icon in your toolbar
+1. Open the popup and **sign in** with email/password or **Continue with Google** (session persists across popup opens).
+2. Navigate to any website
+3. Click the DesignVault icon in your toolbar
 3. The extension auto-scans the page and highlights detected sections
 4. Hover sections on the page to see their label — click to select
 5. Or use the list in the popup to select sections
@@ -32,6 +47,10 @@ A Chrome extension to capture and organize website sections by design type and i
 ```
 design-vault/
 ├── manifest.json        # Extension config (MV3)
+├── firebase-config.js   # Firebase web config (replace placeholders)
+├── auth/
+│   ├── firebase-auth.js # Auth source (Firebase SDK)
+│   └── firebase-auth.bundle.js  # Built by npm run build:auth
 ├── content.js           # Injected into pages — detects & highlights sections
 ├── background.js        # Service worker — storage, messaging
 ├── popup.html           # Extension popup UI

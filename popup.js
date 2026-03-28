@@ -18,15 +18,22 @@ const state = {
 const $ = id => document.getElementById(id);
 
 const views = {
+  auth:     $("view-auth"),
   capture:  $("view-capture"),
   library:  $("view-library"),
   detail:   $("view-detail"),
   settings: $("view-settings"),
 };
 
+const appHeader = $("app-header");
+
 // ── Navigation ────────────────────────────────────────────────────────────────
 function showView(name) {
+  if (appHeader) {
+    appHeader.style.display = name === "auth" ? "none" : "flex";
+  }
   Object.entries(views).forEach(([key, el]) => {
+    if (!el) return;
     el.classList.toggle("active", key === name);
     el.style.display = key === name ? "flex" : "none";
   });
@@ -465,95 +472,124 @@ function openDetailView(save) {
 
   if (save.html) {
     const parts = extractCodeParts(save.html);
-    const bundleText = buildCodeBundleText(parts);
-
-    const preStyle = `
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      padding: 12px;
-      overflow-x: auto;
-      font-size: 11px;
-      line-height: 1.4;
-      max-height: 260px;
-      overflow-y: auto;
-      margin: 0;
-    `;
-
-    const htmlText = escapeHtml(parts.html);
-    const cssText = escapeHtml(parts.css || "/* (none found) */");
-    const jsText = escapeHtml(parts.js || "/* (none found) */");
-    const extCssText = escapeHtml(parts.externals?.css?.length ? parts.externals.css.join("\n") : "");
-    const extJsText = escapeHtml(parts.externals?.js?.length ? parts.externals.js.join("\n") : "");
+    const codeOptions = [
+      { key: "html", label: "HTML", value: parts.html || "/* (none found) */" },
+      { key: "css", label: "CSS", value: parts.css || "/* (none found) */" },
+      { key: "js", label: "JavaScript", value: parts.js || "/* (none found) */" },
+    ];
+    if (parts.externals?.css?.length) {
+      codeOptions.push({
+        key: "css-urls",
+        label: "External CSS URLs",
+        value: parts.externals.css.join("\n"),
+      });
+    }
+    if (parts.externals?.js?.length) {
+      codeOptions.push({
+        key: "js-urls",
+        label: "External JS URLs",
+        value: parts.externals.js.join("\n"),
+      });
+    }
+    const optionFileNames = {
+      html: "section.html",
+      css: "section.css",
+      js: "section.js",
+      "css-urls": "external-css.txt",
+      "js-urls": "external-js.txt",
+    };
 
     codeContainer.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <span style="font-size: 12px; font-weight: 600; color: var(--muted);">Code Bundle</span>
-        <button id="btn-copy-code" style="
-          background: var(--accent);
-          color: white;
-          border: none;
-          padding: 6px 14px;
-          border-radius: 4px;
-          font-size: 12px;
-          cursor: pointer;
-          font-weight: 500;
-        ">Copy Bundle</button>
+      <div class="snpr-code-toolbar">
+        <div class="snpr-code-toolbar-left">
+          <span class="snpr-code-toolbar-title">Code</span>
+          <select id="code-type-select" class="snpr-code-type-select">
+            ${codeOptions.map((o, idx) => `<option value="${o.key}" ${idx === 0 ? "selected" : ""}>${o.label}</option>`).join("")}
+          </select>
+        </div>
       </div>
 
-      <div style="display: flex; flex-direction: column; gap: 12px;">
-        <div>
-          <div style="font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px;">HTML</div>
-          <pre style="${preStyle}"><code>${htmlText}</code></pre>
+      <div class="snpr-code-editor">
+        <div class="snpr-code-editor-header">
+          <span id="detail-code-filename" class="snpr-code-editor-tab">section.html</span>
+          <button id="btn-copy-code" class="snpr-copy-code-btn">Copy</button>
         </div>
-
-        <div>
-          <div style="font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px;">CSS</div>
-          <pre style="${preStyle}"><code>${cssText}</code></pre>
-          ${parts.externals?.css?.length ? `<div style="margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--muted);">External CSS URLs</div><pre style="${preStyle}"><code>${extCssText}</code></pre>` : ``}
-        </div>
-
-        <div>
-          <div style="font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px;">JavaScript</div>
-          <pre style="${preStyle}"><code>${jsText}</code></pre>
-          ${parts.externals?.js?.length ? `<div style="margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--muted);">External JS URLs</div><pre style="${preStyle}"><code>${extJsText}</code></pre>` : ``}
+        <div class="snpr-code-panel">
+          <div id="detail-code-lines" class="snpr-code-lines"></div>
+          <pre id="detail-code-pre" class="snpr-code-block"><code id="detail-current-code"></code></pre>
         </div>
       </div>
     `;
+
+    const selectEl = $("code-type-select");
+    const codeEl = $("detail-current-code");
+    const linesEl = $("detail-code-lines");
+    const preEl = $("detail-code-pre");
+    const fileEl = $("detail-code-filename");
+    const getSelectedOption = () => codeOptions.find(o => o.key === selectEl?.value) || codeOptions[0];
+    const renderSelectedCode = () => {
+      const selected = getSelectedOption();
+      const value = selected?.value || "";
+      if (codeEl) codeEl.textContent = value;
+      if (fileEl) fileEl.textContent = optionFileNames[selected?.key] || "section.txt";
+      if (linesEl) {
+        const lineCount = Math.max(1, value.split("\n").length);
+        linesEl.innerHTML = Array.from({ length: lineCount }, (_, i) => `<div>${i + 1}</div>`).join("");
+      }
+      if (preEl) {
+        preEl.scrollTop = 0;
+        preEl.scrollLeft = 0;
+      }
+      if (linesEl) linesEl.scrollTop = 0;
+    };
+    renderSelectedCode();
+    if (selectEl) {
+      selectEl.addEventListener("change", renderSelectedCode);
+    }
+
+    if (preEl && linesEl) {
+      let syncing = false;
+      const syncFromPre = () => {
+        if (syncing) return;
+        syncing = true;
+        linesEl.scrollTop = preEl.scrollTop;
+        syncing = false;
+      };
+      const syncFromLines = () => {
+        if (syncing) return;
+        syncing = true;
+        preEl.scrollTop = linesEl.scrollTop;
+        syncing = false;
+      };
+      preEl.addEventListener("scroll", syncFromPre);
+      linesEl.addEventListener("scroll", syncFromLines);
+    }
 
     const copyBtn = $("btn-copy-code");
     if (copyBtn) {
       copyBtn.addEventListener("click", async () => {
         try {
-          await navigator.clipboard.writeText(bundleText);
+          const selected = getSelectedOption();
+          await navigator.clipboard.writeText(selected?.value || "");
           const originalText = copyBtn.textContent;
           copyBtn.textContent = "Copied!";
           setTimeout(() => {
             copyBtn.textContent = originalText;
           }, 2000);
-          showToast("Code bundle copied");
+          showToast("Code copied");
         } catch (err) {
           console.error("Failed to copy:", err);
-          showToast("Failed to copy bundle", "error");
+          showToast("Failed to copy code", "error");
         }
       });
     }
   } else {
     // If `html` is missing in older saves, offer a best-effort recovery from the current page.
     codeContainer.innerHTML = `
-      <div style="text-align: center; padding: 20px; color: var(--muted); display: flex; flex-direction: column; gap: 10px; align-items: center;">
+      <div class="snpr-code-empty">
         <div>No section code available for this save.</div>
-        <button id="btn-fetch-code" style="
-          background: var(--bg-secondary);
-          color: var(--text-color);
-          border: 1px solid var(--border-color);
-          padding: 8px 12px;
-          border-radius: 6px;
-          font-size: 12px;
-          cursor: pointer;
-          font-weight: 600;
-        ">Fetch from current page</button>
-        <div id="fetch-code-hint" style="font-size: 11px; color: var(--muted); max-width: 280px;">
+        <button id="btn-fetch-code" class="snpr-fetch-code-btn">Fetch from current page</button>
+        <div id="fetch-code-hint" class="snpr-fetch-code-hint">
           Open the original page, then click fetch.
         </div>
       </div>
@@ -671,7 +707,7 @@ function switchDetailTab(tabName) {
 
   // Update tab content
   $("detail-image-tab").style.display = tabName === "image" ? "flex" : "none";
-  $("detail-code-tab").style.display = tabName === "code" ? "block" : "none";
+  $("detail-code-tab").style.display = tabName === "code" ? "flex" : "none";
   $("detail-info-tab").style.display = tabName === "details" ? "block" : "none";
 }
 
@@ -875,6 +911,19 @@ function wireEvents() {
 
   $("btn-back-settings").addEventListener("click", () => showView("capture"));
 
+  $("btn-sign-out").addEventListener("click", async () => {
+    const authApi = window.SnprFirebaseAuth;
+    if (!authApi) return;
+    try {
+      await authApi.signOutUser();
+      showView("auth");
+      showToast("Signed out");
+    } catch (err) {
+      console.error(err);
+      showToast(err.message || "Sign out failed", "error");
+    }
+  });
+
   $("btn-create-folder").addEventListener("click", async () => {
     const name = $("new-folder-name").value.trim();
     const icon = $("new-folder-icon").value.trim() || "📁";
@@ -890,18 +939,104 @@ function wireEvents() {
   });
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-(async () => {
-  Object.entries(views).forEach(([key, el]) => {
-    el.style.display = key === "capture" ? "flex" : "none";
+function wireAuthEvents(authApi) {
+  const errEl = $("auth-error");
+  const showErr = (msg) => {
+    if (!errEl) return;
+    errEl.textContent = msg;
+    errEl.classList.remove("hidden");
+  };
+  const hideErr = () => errEl?.classList.add("hidden");
+
+  $("auth-show-signup")?.addEventListener("click", () => {
+    $("auth-login-panel")?.classList.add("hidden");
+    $("auth-signup-panel")?.classList.remove("hidden");
+    hideErr();
+  });
+  $("auth-show-login")?.addEventListener("click", () => {
+    $("auth-signup-panel")?.classList.add("hidden");
+    $("auth-login-panel")?.classList.remove("hidden");
+    hideErr();
   });
 
-  await loadBootstrap();
-  wireEvents();
+  $("auth-login-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideErr();
+    const email = $("auth-login-email")?.value.trim();
+    const password = $("auth-login-password")?.value || "";
+    try {
+      await authApi.signInEmailPassword(email, password);
+    } catch (err) {
+      showErr(err.message || "Sign in failed");
+    }
+  });
 
-  const tab = await getActiveTab();
-  if (tab?.url && !tab.url.startsWith("chrome://")) {
-    $("page-title").textContent = tab.title || tab.url;
-    await scanPage().catch(() => {});
+  $("auth-signup-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideErr();
+    const email = $("auth-signup-email")?.value.trim();
+    const password = $("auth-signup-password")?.value || "";
+    try {
+      await authApi.signUpEmailPassword(email, password);
+    } catch (err) {
+      showErr(err.message || "Sign up failed");
+    }
+  });
+
+  $("btn-auth-google")?.addEventListener("click", async () => {
+    hideErr();
+    try {
+      await authApi.signInWithGoogleChrome();
+    } catch (err) {
+      showErr(err.message || "Google sign-in failed");
+    }
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  showView("auth");
+
+  const authApi = window.SnprFirebaseAuth;
+  if (!authApi) {
+    showToast("Auth script missing. Run npm install && npm run build:auth", "error");
+    return;
   }
+
+  const init = authApi.initFirebase();
+  if (!init.ok) {
+    $("auth-error")?.classList.remove("hidden");
+    if ($("auth-error")) $("auth-error").textContent = init.error || "Firebase not configured";
+    wireEvents();
+    wireAuthEvents(authApi);
+    return;
+  }
+
+  wireEvents();
+  wireAuthEvents(authApi);
+
+  authApi.subscribeAuth(async (user) => {
+    if (user) {
+      await loadBootstrap();
+      const emailEl = $("header-user-email");
+      if (emailEl) {
+        const label = user.email || user.displayName || "";
+        emailEl.textContent = label;
+        emailEl.style.display = label ? "inline" : "none";
+      }
+      showView("capture");
+      const tab = await getActiveTab();
+      if (tab?.url && !tab.url.startsWith("chrome://")) {
+        $("page-title").textContent = tab.title || tab.url;
+        await scanPage().catch(() => {});
+      }
+    } else {
+      const emailEl = $("header-user-email");
+      if (emailEl) {
+        emailEl.textContent = "";
+        emailEl.style.display = "none";
+      }
+      showView("auth");
+    }
+  });
 })();

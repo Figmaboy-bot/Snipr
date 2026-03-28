@@ -7,16 +7,55 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles/popup.css" />
+  <link rel="stylesheet" href="styles/content.css" />
 </head>
 <body>
   <div id="app">
 
+    <!-- AUTH -->
+    <div id="view-auth" class="view view-auth">
+      <div class="auth-wrap">
+        <div class="auth-brand">Snpr</div>
+        <p id="auth-error" class="auth-error hidden" role="alert"></p>
+
+        <div id="auth-login-panel">
+          <h2 class="auth-title">Sign in</h2>
+          <form id="auth-login-form" class="auth-form">
+            <label class="auth-label">Email
+              <input type="email" id="auth-login-email" class="text-input" required autocomplete="email" />
+            </label>
+            <label class="auth-label">Password
+              <input type="password" id="auth-login-password" class="text-input" required minlength="6" autocomplete="current-password" />
+            </label>
+            <button type="submit" class="btn-primary auth-submit">Sign in</button>
+          </form>
+          <button type="button" id="btn-auth-google" class="btn-auth-google">Continue with Google</button>
+          <p class="auth-switch">No account? <button type="button" id="auth-show-signup" class="link-btn">Sign up</button></p>
+        </div>
+
+        <div id="auth-signup-panel" class="hidden">
+          <h2 class="auth-title">Create account</h2>
+          <form id="auth-signup-form" class="auth-form">
+            <label class="auth-label">Email
+              <input type="email" id="auth-signup-email" class="text-input" required autocomplete="email" />
+            </label>
+            <label class="auth-label">Password
+              <input type="password" id="auth-signup-password" class="text-input" required minlength="6" autocomplete="new-password" />
+            </label>
+            <button type="submit" class="btn-primary auth-submit">Create account</button>
+          </form>
+          <p class="auth-switch">Have an account? <button type="button" id="auth-show-login" class="link-btn">Sign in</button></p>
+        </div>
+      </div>
+    </div>
+
     <!-- Header -->
-    <header class="header">
+    <header id="app-header" class="header">
       <div class="logo">
         <span class="logo-icon"><img src="icons/icon28.png" alt=""></span>
         <span class="logo-text">Snpr</span>
       </div>
+      <span id="header-user-email" class="header-user-email" title="Signed in"></span>
       <div class="header-actions">
         <button id="btn-library" class="icon-btn" title="View Library">📚</button>
         <button id="btn-settings" class="icon-btn" title="Settings">⚙️</button>
@@ -24,7 +63,7 @@
     </header>
 
     <!-- CAPTURE VIEW -->
-    <div id="view-capture" class="view active">
+    <div id="view-capture" class="view">
       <div class="scan-bar">
         <div class="scan-info">
           <span id="page-title" class="page-title">—</span>
@@ -89,52 +128,52 @@
     </div>
 
 <!-- Detail View -->
-<div id="view-detail" class="view" style="flex-direction: column; padding: 12px;">
+<div id="view-detail" class="view snpr-detail-view">
   <!-- Back and Delete buttons -->
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+  <div class="snpr-detail-header">
     <button id="btn-back-detail">← Back</button>
-    <h3 id="detail-title" style="margin: 0; flex: 1; text-align: center;"></h3>
-    <button id="btn-delete-detail" style="background: #d32f2f; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Delete</button>
+    <h3 id="detail-title" class="snpr-detail-title"></h3>
+    <button id="btn-delete-detail" class="snpr-detail-delete-btn">Delete</button>
   </div>
 
   <!-- Tabs -->
-  <div id="detail-tabs" style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding: 0 0 12px 0; margin-bottom: 12px;"></div>
+  <div id="detail-tabs" class="snpr-detail-tabs"></div>
 
   <!-- Tab Content - Image -->
-  <div id="detail-image-tab" style="flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center;">
-    <img id="detail-screenshot" alt="Screenshot" style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px;">
-    <div id="detail-no-screenshot" style="display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted);">
-      <span style="font-size: 48px;">📷</span>
+  <div id="detail-image-tab" class="snpr-detail-image-tab">
+    <img id="detail-screenshot" alt="Screenshot" class="snpr-detail-screenshot">
+    <div id="detail-no-screenshot" class="snpr-detail-no-screenshot">
+      <span class="snpr-detail-no-shot-icon">📷</span>
       <span>No screenshot available</span>
     </div>
   </div>
 
   <!-- Tab Content - Code -->
-  <div id="detail-code-tab" style="flex: 1; overflow: auto; display: none;">
+  <div id="detail-code-tab" class="snpr-detail-code-tab">
     <div id="detail-code-container"></div>
   </div>
 
   <!-- Tab Content - Details -->
-  <div id="detail-info-tab" style="flex: 1; overflow: auto; display: none; padding: 12px 0;">
+  <div id="detail-info-tab" class="snpr-detail-info-tab">
     <div class="detail-row">
-      <span style="display: flex; align-items: center; gap: 6px;"><span>📁</span> Folder</span>
+      <span class="snpr-detail-row-label"><span>📁</span> Folder</span>
       <span id="detail-folder">—</span>
     </div>
     <div class="detail-row">
-      <span style="display: flex; align-items: center; gap: 6px;"><span>🔗</span> Source</span>
-      <a id="detail-url" href="#" target="_blank" style="color: var(--accent); text-decoration: none; word-break: break-all;"></a>
+      <span class="snpr-detail-row-label"><span>🔗</span> Source</span>
+      <a id="detail-url" href="#" target="_blank" class="snpr-detail-url"></a>
     </div>
     <div class="detail-row">
-      <span style="display: flex; align-items: center; gap: 6px;"><span>📅</span> Saved</span>
+      <span class="snpr-detail-row-label"><span>📅</span> Saved</span>
       <span id="detail-date"></span>
     </div>
-    <div class="detail-row" id="detail-categories-row" style="display: none;">
-      <span style="display: flex; align-items: center; gap: 6px;"><span>🏷️</span> Tags</span>
+    <div class="detail-row hidden" id="detail-categories-row">
+      <span class="snpr-detail-row-label"><span>🏷️</span> Tags</span>
       <div id="detail-categories"></div>
     </div>
-    <div class="detail-row" id="detail-note-row" style="display: none;">
-      <span style="display: flex; align-items: center; gap: 6px;"><span>📝</span> Note</span>
-      <span id="detail-note" style="font-size: 12px; color: var(--muted);"></span>
+    <div class="detail-row hidden" id="detail-note-row">
+      <span class="snpr-detail-row-label"><span>📝</span> Note</span>
+      <span id="detail-note" class="snpr-detail-note"></span>
     </div>
   </div>
 </div>
@@ -160,12 +199,18 @@
         <h3 class="settings-title">Categories</h3>
         <div id="category-manager"></div>
       </section>
+
+      <section class="settings-section">
+        <h3 class="settings-title">Account</h3>
+        <button type="button" id="btn-sign-out" class="btn-ghost-sm btn-sign-out">Sign out</button>
+      </section>
     </div>
 
     <!-- Toast -->
     <div id="toast" class="toast hidden"></div>
 
   </div>
+  <script src="auth/firebase-auth.bundle.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

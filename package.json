@@ -1,0 +1,13 @@
+{
+  "name": "snipr",
+  "private": true,
+  "scripts": {
+    "build:auth": "node scripts/build-auth.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
+  },
+  "dependencies": {
+    "firebase": "^11.10.0"
+  }
+}
