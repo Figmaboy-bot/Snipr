@@ -13,41 +13,120 @@
   <div id="app">
 
     <!-- AUTH -->
-    <div id="view-auth" class="view view-auth">
-      <div class="auth-wrap">
-        <div class="auth-brand">Snpr</div>
-        <p id="auth-error" class="auth-error hidden" role="alert"></p>
+    <!-- Auth View - Email/Password with eye icon -->
+<div id="view-auth" class="view" style="flex-direction: column; padding: 20px; justify-content: center;">
+  <div style="max-width: 400px; margin: 0 auto; width: 100%;">
+    <h1 style="text-align: center; margin-bottom: 24px;">DesignVault</h1>
 
-        <div id="auth-login-panel">
-          <h2 class="auth-title">Sign in</h2>
-          <form id="auth-login-form" class="auth-form">
-            <label class="auth-label">Email
-              <input type="email" id="auth-login-email" class="text-input" required autocomplete="email" />
-            </label>
-            <label class="auth-label">Password
-              <input type="password" id="auth-login-password" class="text-input" required minlength="6" autocomplete="current-password" />
-            </label>
-            <button type="submit" class="btn-primary auth-submit">Sign in</button>
-          </form>
-          <button type="button" id="btn-auth-google" class="btn-auth-google">Continue with Google</button>
-          <p class="auth-switch">No account? <button type="button" id="auth-show-signup" class="link-btn">Sign up</button></p>
-        </div>
+    <!-- Tabs -->
+    <div style="display: flex; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+      <button id="tab-sign-in" class="auth-tab active" style="padding: 8px 16px; border: none; background: transparent; color: var(--accent); cursor: pointer; font-weight: 600; border-bottom: 2px solid var(--accent);">Sign In</button>
+      <button id="tab-create-account" class="auth-tab" style="padding: 8px 16px; border: none; background: transparent; color: var(--muted); cursor: pointer; font-weight: 600; border-bottom: 2px solid transparent;">Create Account</button>
+    </div>
 
-        <div id="auth-signup-panel" class="hidden">
-          <h2 class="auth-title">Create account</h2>
-          <form id="auth-signup-form" class="auth-form">
-            <label class="auth-label">Email
-              <input type="email" id="auth-signup-email" class="text-input" required autocomplete="email" />
-            </label>
-            <label class="auth-label">Password
-              <input type="password" id="auth-signup-password" class="text-input" required minlength="6" autocomplete="new-password" />
-            </label>
-            <button type="submit" class="btn-primary auth-submit">Create account</button>
-          </form>
-          <p class="auth-switch">Have an account? <button type="button" id="auth-show-login" class="link-btn">Sign in</button></p>
+    <!-- Error message -->
+    <div id="auth-error" class="hidden" style="background: #ffebee; color: #c62828; padding: 12px; border-radius: 4px; margin-bottom: 16px; display: none;"></div>
+
+    <!-- Sign In Form -->
+    <div id="auth-sign-in" style="display: block;">
+      <form id="auth-login-form" style="display: flex; flex-direction: column; gap: 12px;">
+        <input 
+          id="auth-login-email" 
+          type="email" 
+          placeholder="Email" 
+          required
+          style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-color); box-sizing: border-box;"
+        >
+        
+        <!-- Password field with eye icon -->
+        <div style="position: relative;">
+          <input 
+            id="auth-login-password" 
+            type="password" 
+            placeholder="Password" 
+            required
+            style="width: 100%; padding: 12px; padding-right: 40px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-color); box-sizing: border-box;"
+          >
+          <button 
+            id="auth-login-toggle" 
+            type="button" 
+            style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;"
+          >
+            👁️
+          </button>
         </div>
+        
+        <button 
+          type="submit" 
+          style="width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 8px;"
+        >
+          Sign In
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 16px; font-size: 12px;">
+        Don't have an account? 
+        <button 
+          id="auth-show-signup" 
+          style="background: none; border: none; color: var(--accent); cursor: pointer; text-decoration: underline; font-weight: 600;"
+        >
+          Create one
+        </button>
       </div>
     </div>
+
+    <!-- Create Account Form -->
+    <div id="auth-create-account" style="display: none;">
+      <form id="auth-signup-form" style="display: flex; flex-direction: column; gap: 12px;">
+        <input 
+          id="auth-signup-email" 
+          type="email" 
+          placeholder="Email" 
+          required
+          style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-color); box-sizing: border-box;"
+        >
+        
+        <!-- Password field with eye icon -->
+        <div style="position: relative;">
+          <input 
+            id="auth-signup-password" 
+            type="password" 
+            placeholder="Password (min 6 chars)" 
+            required
+            minlength="6"
+            style="width: 100%; padding: 12px; padding-right: 40px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-color); box-sizing: border-box;"
+          >
+          <button 
+            id="auth-signup-toggle" 
+            type="button" 
+            style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;"
+          >
+            👁️
+          </button>
+        </div>
+        
+        <button 
+          type="submit" 
+          style="width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 8px;"
+        >
+          Create Account
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 16px; font-size: 12px;">
+        Already have an account? 
+        <button 
+          id="auth-show-login" 
+          style="background: none; border: none; color: var(--accent); cursor: pointer; text-decoration: underline; font-weight: 600;"
+        >
+          Sign in
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
 
     <!-- Header -->
     <header id="app-header" class="header">

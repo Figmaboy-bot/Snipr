@@ -937,6 +937,29 @@ function wireEvents() {
       showToast(`Folder "${name}" created`);
     }
   });
+
+  function showAuthView(type) {
+    const signInForm = $("auth-sign-in");
+    const createForm = $("auth-create-account");
+    const signInTab = $("tab-sign-in");
+    const createTab = $("tab-create-account");
+
+    if (type === "signin") {
+      signInForm.style.display = "block";
+      createForm.style.display = "none";
+      signInTab.classList.add("active");
+      createTab.classList.remove("active");
+    } else {
+      signInForm.style.display = "none";
+      createForm.style.display = "block";
+      signInTab.classList.remove("active");
+      createTab.classList.add("active");
+    }
+  }
+
+  // Wire events
+  $("tab-sign-in").addEventListener("click", () => showAuthView("signin"));
+  $("tab-create-account").addEventListener("click", () => showAuthView("create"));
 }
 
 function wireAuthEvents(authApi) {
@@ -948,14 +971,46 @@ function wireAuthEvents(authApi) {
   };
   const hideErr = () => errEl?.classList.add("hidden");
 
+  // Password visibility toggles
+  const togglePasswordVisibility = (inputId, toggleBtnId) => {
+    const input = $(inputId);
+    const btn = $(toggleBtnId);
+    if (!input || !btn) return;
+    
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const isPassword = input.type === "password";
+      input.type = isPassword ? "text" : "password";
+      btn.textContent = isPassword ? "🙈" : "👁️";
+    });
+  };
+
+  togglePasswordVisibility("auth-login-password", "auth-login-toggle");
+  togglePasswordVisibility("auth-signup-password", "auth-signup-toggle");
+
   $("auth-show-signup")?.addEventListener("click", () => {
-    $("auth-login-panel")?.classList.add("hidden");
-    $("auth-signup-panel")?.classList.remove("hidden");
+    $("auth-login-form")?.reset();
+    $("auth-signup-form")?.reset();
+    $("auth-sign-in").style.display = "none";
+    $("auth-create-account").style.display = "block";
+    // Reset eye icons
+    $("auth-login-password").type = "password";
+    $("auth-signup-password").type = "password";
+    $("auth-login-toggle").textContent = "👁️";
+    $("auth-signup-toggle").textContent = "👁️";
     hideErr();
   });
+  
   $("auth-show-login")?.addEventListener("click", () => {
-    $("auth-signup-panel")?.classList.add("hidden");
-    $("auth-login-panel")?.classList.remove("hidden");
+    $("auth-login-form")?.reset();
+    $("auth-signup-form")?.reset();
+    $("auth-create-account").style.display = "none";
+    $("auth-sign-in").style.display = "block";
+    // Reset eye icons
+    $("auth-login-password").type = "password";
+    $("auth-signup-password").type = "password";
+    $("auth-login-toggle").textContent = "👁️";
+    $("auth-signup-toggle").textContent = "👁️";
     hideErr();
   });
 
@@ -983,12 +1038,22 @@ function wireAuthEvents(authApi) {
     }
   });
 
+  // Google sign-in (both tabs use same handler)
   $("btn-auth-google")?.addEventListener("click", async () => {
     hideErr();
     try {
       await authApi.signInWithGoogleChrome();
     } catch (err) {
       showErr(err.message || "Google sign-in failed");
+    }
+  });
+
+  $("btn-auth-google-signup")?.addEventListener("click", async () => {
+    hideErr();
+    try {
+      await authApi.signInWithGoogleChrome();
+    } catch (err) {
+      showErr(err.message || "Google sign-up failed");
     }
   });
 }
