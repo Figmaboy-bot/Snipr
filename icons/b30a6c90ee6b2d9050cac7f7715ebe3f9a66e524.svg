@@ -1,0 +1,16 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Scissors" clip-path="url(#clip0_14_21)">
+<g id="Vector">
+</g>
+<path id="Vector_2" d="M4.6875 8.125C5.89562 8.125 6.875 7.14562 6.875 5.9375C6.875 4.72938 5.89562 3.75 4.6875 3.75C3.47938 3.75 2.5 4.72938 2.5 5.9375C2.5 7.14562 3.47938 8.125 4.6875 8.125Z" stroke="var(--stroke-0, white)" stroke-width="0.9375" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_3" d="M4.6875 16.25C5.89562 16.25 6.875 15.2706 6.875 14.0625C6.875 12.8544 5.89562 11.875 4.6875 11.875C3.47938 11.875 2.5 12.8544 2.5 14.0625C2.5 15.2706 3.47938 16.25 4.6875 16.25Z" stroke="var(--stroke-0, white)" stroke-width="0.9375" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_4" d="M10.625 10L6.49297 12.8273" stroke="var(--stroke-0, white)" stroke-width="0.9375" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_5" d="M18.125 4.86875L12.8383 8.48516" stroke="var(--stroke-0, white)" stroke-width="0.9375" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_6" d="M18.125 15.1312L6.49297 7.17266" stroke="var(--stroke-0, white)" stroke-width="0.9375" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<clipPath id="clip0_14_21">
+<rect width="20" height="20" fill="white"/>
+</clipPath>
+</defs>
+</svg>

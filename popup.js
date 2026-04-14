@@ -1,4 +1,4 @@
-// DesignVault — Popup Logic
+// Snipr — Popup Logic
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const state = {
@@ -18,24 +18,23 @@ const state = {
 const $ = id => document.getElementById(id);
 
 const views = {
-  auth:     $("view-auth"),
   capture:  $("view-capture"),
   library:  $("view-library"),
   detail:   $("view-detail"),
   settings: $("view-settings"),
 };
 
-const appHeader = $("app-header");
-
 // ── Navigation ────────────────────────────────────────────────────────────────
 function showView(name) {
-  if (appHeader) {
-    appHeader.style.display = name === "auth" ? "none" : "flex";
-  }
   Object.entries(views).forEach(([key, el]) => {
     if (!el) return;
     el.classList.toggle("active", key === name);
     el.style.display = key === name ? "flex" : "none";
+  });
+  // Sync tab bar — detail keeps library tab highlighted
+  const activeTab = name === "detail" ? "library" : name;
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.getAttribute("data-view") === activeTab);
   });
 }
 
@@ -162,43 +161,86 @@ async function scanPage() {
 
   $("section-count").textContent = `${state.sections.length} sections found`;
   $("empty-state").classList.add("hidden");
-  renderSectionList();
+  renderSectionGrid();
 
   if (state.sections.length === 0) {
     $("empty-state").classList.remove("hidden");
-    $("sections-list").classList.add("hidden");
+    $("sections-grid").classList.add("hidden");
   } else {
-    $("sections-list").classList.remove("hidden");
+    $("sections-grid").classList.remove("hidden");
+    loadSectionThumbnails().catch(() => {});
   }
 }
 
-// ── Section list ──────────────────────────────────────────────────────────────
-function renderSectionList() {
-  const container = $("sections-items");
+// ── Section thumbnail loader ──────────────────────────────────────────────────
+let _thumbnailScanId = 0;
+
+async function loadSectionThumbnails() {
+  const scanId = ++_thumbnailScanId;
+
+  for (const section of state.sections) {
+    // Abort if a new scan started
+    if (scanId !== _thumbnailScanId) return;
+
+    try {
+      const screenshot = await captureSectionScreenshot(section.id);
+      if (!screenshot) continue;
+      if (scanId !== _thumbnailScanId) return;
+
+      const card = document.querySelector(`.section-card[data-id="${section.id}"]`);
+      if (!card || !card.isConnected) continue;
+
+      const thumb = card.querySelector(".section-card-thumb");
+      if (thumb) {
+        thumb.innerHTML = `<img src="${screenshot}" alt="${section.label}" />`;
+      }
+    } catch (_e) {
+      // Silently skip failed thumbnails
+    }
+  }
+}
+
+// ── Section grid ──────────────────────────────────────────────────────────────
+function renderSectionGrid() {
+  const container = $("sections-grid");
   container.innerHTML = "";
   state.sections.forEach(s => {
-    const el = document.createElement("div");
-    el.className = "section-item";
-    el.setAttribute("data-id", s.id);
-    el.innerHTML = `
-      <div class="section-check">✓</div>
-      <span class="section-label">${s.label}</span>
+    const card = document.createElement("div");
+    card.className = "section-card";
+    card.setAttribute("data-id", s.id);
+    card.innerHTML = `
+      <div class="section-card-thumb">
+        <div class="section-card-thumb-placeholder">
+          <span class="ph-icon">${sectionIcon(s.label)}</span>
+        </div>
+      </div>
+      <p class="section-card-label">${s.label}</p>
     `;
-    el.addEventListener("click", () => toggleSectionFromList(s.id, el));
-    container.appendChild(el);
+    card.addEventListener("click", () => toggleSectionCard(s.id, card));
+    container.appendChild(card);
   });
 }
 
-function toggleSectionFromList(id, el) {
+function sectionIcon(label) {
+  const map = {
+    Navbar: "🧭", Header: "🏷️", Hero: "🦸", Features: "✨",
+    Pricing: "💰", Testimonials: "💬", CTA: "📣", FAQ: "❓",
+    Footer: "🏁", Blog: "📝", Contact: "📬", Gallery: "🖼️",
+    Stats: "📊", Team: "👥", Sidebar: "📌", Main: "📄",
+  };
+  return map[label] || "📄";
+}
+
+function toggleSectionCard(id, card) {
   const idx = state.selectedSections.findIndex(s => s.id === id);
   if (idx > -1) {
     state.selectedSections.splice(idx, 1);
-    el.classList.remove("selected");
+    card.classList.remove("selected");
   } else {
     const section = state.sections.find(s => s.id === id);
     if (section) {
       state.selectedSections.push(section);
-      el.classList.add("selected");
+      card.classList.add("selected");
     }
   }
   updateSavePanel();
@@ -214,9 +256,9 @@ chrome.runtime.onMessage.addListener((msg) => {
 });
 
 function syncListSelection() {
-  document.querySelectorAll(".section-item").forEach(el => {
-    const id = el.getAttribute("data-id");
-    el.classList.toggle("selected", state.selectedSections.some(s => s.id === id));
+  document.querySelectorAll(".section-card").forEach(card => {
+    const id = card.getAttribute("data-id");
+    card.classList.toggle("selected", state.selectedSections.some(s => s.id === id));
   });
 }
 
@@ -273,7 +315,7 @@ async function saveSelectedSections() {
 
   const saveBtn = $("btn-save");
   const originalText = saveBtn.textContent;
-  saveBtn.textContent = "Capturing…";
+  saveBtn.textContent = "Snipping…";
   saveBtn.disabled = true;
 
   try {
@@ -313,14 +355,14 @@ async function saveSelectedSections() {
     saveBtn.disabled = false;
 
     if (res.ok) {
-      showToast(`✓ Saved ${res.saved} section${res.saved !== 1 ? "s" : ""}!`);
+      showToast(`✂ Snipped ${res.saved} section${res.saved !== 1 ? "s" : ""}!`);
       state.selectedSections = [];
       state.selectedCategories.clear();
       $("note-input").value = "";
       syncListSelection();
       updateSavePanel();
       sendToContent({ type: "DEACTIVATE_OVERLAY" }).catch(() => {});
-      $("sections-list").classList.add("hidden");
+      $("sections-grid").classList.add("hidden");
       $("section-count").textContent = "0 sections found";
       $("empty-state").classList.remove("hidden");
     } else {
@@ -841,7 +883,7 @@ async function exportVault() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `design-vault-export-${Date.now()}.json`;
+  a.download = `snipr-export-${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -856,7 +898,6 @@ function wireEvents() {
     syncListSelection();
     updateSavePanel();
     sendToContent({ type: "DEACTIVATE_OVERLAY" }).catch(() => {});
-    scanPage();
   });
 
   $("btn-save").addEventListener("click", saveSelectedSections);
@@ -873,14 +914,6 @@ function wireEvents() {
     if (e.key === "Enter") $("btn-add-category").click();
   });
 
-  $("btn-library").addEventListener("click", async () => {
-    await loadBootstrap();
-    await loadLibrary();
-    showView("library");
-  });
-
-  $("btn-back").addEventListener("click", () => showView("capture"));
-
   $("btn-export").addEventListener("click", exportVault);
 
   $("category-filter").addEventListener("change", e => {
@@ -888,10 +921,7 @@ function wireEvents() {
     loadLibrary();
   });
 
-  $("btn-back-detail").addEventListener("click", async () => {
-    await loadLibrary();
-    showView("library");
-  });
+  $("btn-back-detail").addEventListener("click", () => showView("library"));
 
   $("btn-delete-detail").addEventListener("click", async () => {
     if (!state.detailSave) return;
@@ -902,26 +932,20 @@ function wireEvents() {
     showToast("Section deleted");
   });
 
-  $("btn-settings").addEventListener("click", async () => {
-    await loadBootstrap();
-    renderFolderManager();
-    renderCategoryManager();
-    showView("settings");
-  });
-
-  $("btn-back-settings").addEventListener("click", () => showView("capture"));
-
-  $("btn-sign-out").addEventListener("click", async () => {
-    const authApi = window.SnprFirebaseAuth;
-    if (!authApi) return;
-    try {
-      await authApi.signOutUser();
-      showView("auth");
-      showToast("Signed out");
-    } catch (err) {
-      console.error(err);
-      showToast(err.message || "Sign out failed", "error");
-    }
+  // Tab bar navigation
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const view = btn.getAttribute("data-view");
+      if (view === "library") {
+        await loadBootstrap();
+        await loadLibrary();
+      } else if (view === "settings") {
+        await loadBootstrap();
+        renderFolderManager();
+        renderCategoryManager();
+      }
+      showView(view);
+    });
   });
 
   $("btn-create-folder").addEventListener("click", async () => {
@@ -938,170 +962,16 @@ function wireEvents() {
     }
   });
 
-  function showAuthView(type) {
-    const signInForm = $("auth-sign-in");
-    const createForm = $("auth-create-account");
-    const signInTab = $("tab-sign-in");
-    const createTab = $("tab-create-account");
-
-    if (type === "signin") {
-      signInForm.style.display = "block";
-      createForm.style.display = "none";
-      signInTab.classList.add("active");
-      createTab.classList.remove("active");
-    } else {
-      signInForm.style.display = "none";
-      createForm.style.display = "block";
-      signInTab.classList.remove("active");
-      createTab.classList.add("active");
-    }
-  }
-
-  // Wire events
-  $("tab-sign-in").addEventListener("click", () => showAuthView("signin"));
-  $("tab-create-account").addEventListener("click", () => showAuthView("create"));
-}
-
-function wireAuthEvents(authApi) {
-  const errEl = $("auth-error");
-  const showErr = (msg) => {
-    if (!errEl) return;
-    errEl.textContent = msg;
-    errEl.classList.remove("hidden");
-  };
-  const hideErr = () => errEl?.classList.add("hidden");
-
-  // Password visibility toggles
-  const togglePasswordVisibility = (inputId, toggleBtnId) => {
-    const input = $(inputId);
-    const btn = $(toggleBtnId);
-    if (!input || !btn) return;
-    
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      const isPassword = input.type === "password";
-      input.type = isPassword ? "text" : "password";
-      btn.textContent = isPassword ? "🙈" : "👁️";
-    });
-  };
-
-  togglePasswordVisibility("auth-login-password", "auth-login-toggle");
-  togglePasswordVisibility("auth-signup-password", "auth-signup-toggle");
-
-  $("auth-show-signup")?.addEventListener("click", () => {
-    $("auth-login-form")?.reset();
-    $("auth-signup-form")?.reset();
-    $("auth-sign-in").style.display = "none";
-    $("auth-create-account").style.display = "block";
-    // Reset eye icons
-    $("auth-login-password").type = "password";
-    $("auth-signup-password").type = "password";
-    $("auth-login-toggle").textContent = "👁️";
-    $("auth-signup-toggle").textContent = "👁️";
-    hideErr();
-  });
-  
-  $("auth-show-login")?.addEventListener("click", () => {
-    $("auth-login-form")?.reset();
-    $("auth-signup-form")?.reset();
-    $("auth-create-account").style.display = "none";
-    $("auth-sign-in").style.display = "block";
-    // Reset eye icons
-    $("auth-login-password").type = "password";
-    $("auth-signup-password").type = "password";
-    $("auth-login-toggle").textContent = "👁️";
-    $("auth-signup-toggle").textContent = "👁️";
-    hideErr();
-  });
-
-  $("auth-login-form")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    hideErr();
-    const email = $("auth-login-email")?.value.trim();
-    const password = $("auth-login-password")?.value || "";
-    try {
-      await authApi.signInEmailPassword(email, password);
-    } catch (err) {
-      showErr(err.message || "Sign in failed");
-    }
-  });
-
-  $("auth-signup-form")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    hideErr();
-    const email = $("auth-signup-email")?.value.trim();
-    const password = $("auth-signup-password")?.value || "";
-    try {
-      await authApi.signUpEmailPassword(email, password);
-    } catch (err) {
-      showErr(err.message || "Sign up failed");
-    }
-  });
-
-  // Google sign-in (both tabs use same handler)
-  $("btn-auth-google")?.addEventListener("click", async () => {
-    hideErr();
-    try {
-      await authApi.signInWithGoogleChrome();
-    } catch (err) {
-      showErr(err.message || "Google sign-in failed");
-    }
-  });
-
-  $("btn-auth-google-signup")?.addEventListener("click", async () => {
-    hideErr();
-    try {
-      await authApi.signInWithGoogleChrome();
-    } catch (err) {
-      showErr(err.message || "Google sign-up failed");
-    }
-  });
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async () => {
-  showView("auth");
-
-  const authApi = window.SnprFirebaseAuth;
-  if (!authApi) {
-    showToast("Auth script missing. Run npm install && npm run build:auth", "error");
-    return;
-  }
-
-  const init = authApi.initFirebase();
-  if (!init.ok) {
-    $("auth-error")?.classList.remove("hidden");
-    if ($("auth-error")) $("auth-error").textContent = init.error || "Firebase not configured";
-    wireEvents();
-    wireAuthEvents(authApi);
-    return;
-  }
-
   wireEvents();
-  wireAuthEvents(authApi);
-
-  authApi.subscribeAuth(async (user) => {
-    if (user) {
-      await loadBootstrap();
-      const emailEl = $("header-user-email");
-      if (emailEl) {
-        const label = user.email || user.displayName || "";
-        emailEl.textContent = label;
-        emailEl.style.display = label ? "inline" : "none";
-      }
-      showView("capture");
-      const tab = await getActiveTab();
-      if (tab?.url && !tab.url.startsWith("chrome://")) {
-        $("page-title").textContent = tab.title || tab.url;
-        await scanPage().catch(() => {});
-      }
-    } else {
-      const emailEl = $("header-user-email");
-      if (emailEl) {
-        emailEl.textContent = "";
-        emailEl.style.display = "none";
-      }
-      showView("auth");
-    }
-  });
+  await loadBootstrap();
+  showView("capture");
+  const tab = await getActiveTab();
+  if (tab?.url && !tab.url.startsWith("chrome://")) {
+    $("page-title").textContent = tab.title || tab.url;
+    await scanPage().catch(() => {});
+  }
 })();

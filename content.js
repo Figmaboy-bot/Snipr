@@ -1,9 +1,9 @@
-// DesignVault Content Script
+// Snipr Content Script
 // Detects semantic sections and manages highlight/selection overlay
 
 (function () {
-  if (window.__designVaultLoaded) return;
-  window.__designVaultLoaded = true;
+  if (window.__sniprLoaded) return;
+  window.__sniprLoaded = true;
 
   // ── Section Detection ──────────────────────────────────────────────────────
 
@@ -56,7 +56,12 @@
       return HINT_MAP.some(({ pattern }) => pattern.test(combined));
     });
 
-    const all = [...new Set([...rawEls, ...divHints])];
+    const all = [...new Set([...rawEls, ...divHints])].sort((a, b) => {
+      const pos = a.compareDocumentPosition(b);
+      if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+      if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+      return 0;
+    });
 
     return all
       .filter(el => {
@@ -255,9 +260,18 @@
 
         case "GET_SECTION_RECT": {
           console.log("GET_SECTION_RECT - sectionId:", message.sectionId);
-          const rect = captureSection(message.sectionId);
-          console.log("Captured rect:", rect);
-          sendResponse({ rect });
+          const section = detectedSections.find(s => s.id === message.sectionId);
+          if (!section) {
+            sendResponse({ rect: null });
+            break;
+          }
+          // Scroll section into view, then wait for layout to settle before returning rect
+          section.el.scrollIntoView({ behavior: "instant", block: "start" });
+          setTimeout(() => {
+            const rect = captureSection(message.sectionId);
+            console.log("Captured rect:", rect);
+            sendResponse({ rect });
+          }, 120);
           break;
         }
 

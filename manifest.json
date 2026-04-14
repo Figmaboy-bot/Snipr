@@ -1,22 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "DesignVault",
+  "name": "Snipr",
   "version": "1.0.0",
-  "description": "Capture and organize website sections by design category",
+  "description": "Snip and save website sections by design category",
   "permissions": [
     "activeTab",
     "storage",
     "scripting",
-    "identity"
+    "unlimitedStorage"
   ],
-  "oauth2": {
-    "client_id": "247351645246-olda60dtsbnaiq9baugi3mnjae0icud6.apps.googleusercontent.com",
-    "scopes": [
-      "openid",
-      "email",
-      "profile"
-    ]
-  },
   "host_permissions": [
     "<all_urls>"
   ],

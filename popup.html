@@ -3,293 +3,164 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DesignVault</title>
+  <title>Snipr</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles/popup.css" />
   <link rel="stylesheet" href="styles/content.css" />
 </head>
 <body>
   <div id="app">
 
-    <!-- AUTH -->
-    <!-- Auth View - Email/Password with eye icon -->
-<div id="view-auth" class="view" style="flex-direction: column; padding: 20px; justify-content: center;">
-  <div style="max-width: 400px; margin: 0 auto; width: 100%;">
-    <h1 style="text-align: center; margin-bottom: 24px;">DesignVault</h1>
-
-    <!-- Tabs -->
-    <div style="display: flex; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
-      <button id="tab-sign-in" class="auth-tab active" style="padding: 8px 16px; border: none; background: transparent; color: var(--accent); cursor: pointer; font-weight: 600; border-bottom: 2px solid var(--accent);">Sign In</button>
-      <button id="tab-create-account" class="auth-tab" style="padding: 8px 16px; border: none; background: transparent; color: var(--muted); cursor: pointer; font-weight: 600; border-bottom: 2px solid transparent;">Create Account</button>
-    </div>
-
-    <!-- Error message -->
-    <div id="auth-error" class="hidden" style="background: #ffebee; color: #c62828; padding: 12px; border-radius: 4px; margin-bottom: 16px; display: none;"></div>
-
-    <!-- Sign In Form -->
-    <div id="auth-sign-in" style="display: block;">
-      <form id="auth-login-form" style="display: flex; flex-direction: column; gap: 12px;">
-        <input 
-          id="auth-login-email" 
-          type="email" 
-          placeholder="Email" 
-          required
-          style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-color); box-sizing: border-box;"
-        >
-        
-        <!-- Password field with eye icon -->
-        <div style="position: relative;">
-          <input 
-            id="auth-login-password" 
-            type="password" 
-            placeholder="Password" 
-            required
-            style="width: 100%; padding: 12px; padding-right: 40px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-color); box-sizing: border-box;"
-          >
-          <button 
-            id="auth-login-toggle" 
-            type="button" 
-            style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;"
-          >
-            👁️
-          </button>
-        </div>
-        
-        <button 
-          type="submit" 
-          style="width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 8px;"
-        >
-          Sign In
-        </button>
-      </form>
-
-      <div style="text-align: center; margin-top: 16px; font-size: 12px;">
-        Don't have an account? 
-        <button 
-          id="auth-show-signup" 
-          style="background: none; border: none; color: var(--accent); cursor: pointer; text-decoration: underline; font-weight: 600;"
-        >
-          Create one
-        </button>
-      </div>
-    </div>
-
-    <!-- Create Account Form -->
-    <div id="auth-create-account" style="display: none;">
-      <form id="auth-signup-form" style="display: flex; flex-direction: column; gap: 12px;">
-        <input 
-          id="auth-signup-email" 
-          type="email" 
-          placeholder="Email" 
-          required
-          style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-color); box-sizing: border-box;"
-        >
-        
-        <!-- Password field with eye icon -->
-        <div style="position: relative;">
-          <input 
-            id="auth-signup-password" 
-            type="password" 
-            placeholder="Password (min 6 chars)" 
-            required
-            minlength="6"
-            style="width: 100%; padding: 12px; padding-right: 40px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-color); box-sizing: border-box;"
-          >
-          <button 
-            id="auth-signup-toggle" 
-            type="button" 
-            style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;"
-          >
-            👁️
-          </button>
-        </div>
-        
-        <button 
-          type="submit" 
-          style="width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 8px;"
-        >
-          Create Account
-        </button>
-      </form>
-
-      <div style="text-align: center; margin-top: 16px; font-size: 12px;">
-        Already have an account? 
-        <button 
-          id="auth-show-login" 
-          style="background: none; border: none; color: var(--accent); cursor: pointer; text-decoration: underline; font-weight: 600;"
-        >
-          Sign in
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-    
-
-    <!-- Header -->
-    <header id="app-header" class="header">
+    <!-- Navbar -->
+    <header class="snipr-nav">
       <div class="logo">
-        <span class="logo-icon"><img src="icons/icon28.png" alt=""></span>
-        <span class="logo-text">Snpr</span>
+        <img src="icons/icon28.png" class="logo-icon" alt="">
+        <span class="logo-text">Snipr</span>
       </div>
-      <span id="header-user-email" class="header-user-email" title="Signed in"></span>
-      <div class="header-actions">
-        <button id="btn-library" class="icon-btn" title="View Library">📚</button>
-        <button id="btn-settings" class="icon-btn" title="Settings">⚙️</button>
-      </div>
+      <button id="btn-scan" class="btn-start-snipping">Start Snipping</button>
     </header>
 
-    <!-- CAPTURE VIEW -->
-    <div id="view-capture" class="view">
-      <div class="scan-bar">
-        <div class="scan-info">
-          <span id="page-title" class="page-title">—</span>
-          <span id="section-count" class="section-count">0 sections found</span>
-        </div>
-        <button id="btn-scan" class="btn-primary">Scan Page</button>
-      </div>
+    <!-- White content panel -->
+    <div class="snipr-body">
 
-      <div id="sections-list" class="sections-list hidden">
+      <!-- CAPTURE VIEW -->
+      <div id="view-capture" class="view active">
+        <!-- hidden helpers for JS -->
+        <span id="page-title" style="display:none"></span>
+        <span id="section-count" style="display:none"></span>
+
         <p class="list-hint">Click sections on the page to select them, or select from the list below:</p>
-        <div id="sections-items"></div>
-      </div>
 
-      <div id="save-panel" class="save-panel hidden">
-        <div class="save-panel-header">
-          <span id="selected-count">0 selected</span>
-          <button id="btn-clear-selection" class="link-btn">Clear</button>
+        <div id="sections-grid" class="sections-grid hidden"></div>
+
+        <div id="save-panel" class="save-panel hidden">
+          <div class="save-panel-header">
+            <span id="selected-count">0 selected</span>
+            <button id="btn-clear-selection" class="link-btn">Clear</button>
+          </div>
+          <label class="field-label">Save to folder</label>
+          <div id="folder-select" class="folder-grid"></div>
+          <label class="field-label">Categories</label>
+          <div id="category-chips" class="chip-group"></div>
+          <div class="inline-add">
+            <input id="new-category-input" type="text" placeholder="Add category…" class="text-input" />
+            <button id="btn-add-category" class="btn-ghost-sm">Add</button>
+          </div>
+          <label class="field-label">Note <span class="optional">(optional)</span></label>
+          <textarea id="note-input" class="text-area" placeholder="What do you like about this?"></textarea>
+          <button id="btn-save" class="btn-save">Save Snip ✂</button>
         </div>
 
-        <label class="field-label">Save to folder</label>
-        <div id="folder-select" class="folder-grid"></div>
-
-        <label class="field-label">Categories</label>
-        <div id="category-chips" class="chip-group"></div>
-        <div class="inline-add">
-          <input id="new-category-input" type="text" placeholder="Add category…" class="text-input" />
-          <button id="btn-add-category" class="btn-ghost-sm">Add</button>
+        <div id="empty-state" class="empty-state">
+          <div class="empty-icon">✂</div>
+          <p>Hit <strong>Start Snipping</strong> to detect<br/>sections on this page.</p>
         </div>
-
-        <label class="field-label">Note <span class="optional">(optional)</span></label>
-        <textarea id="note-input" class="text-area" placeholder="What do you like about this?"></textarea>
-
-        <button id="btn-save" class="btn-save">Save to Vault ⬡</button>
       </div>
 
-      <div id="empty-state" class="empty-state">
-        <div class="empty-icon">⬡</div>
-        <p>Scan any page to detect its sections,<br/>then save the ones you love.</p>
-      </div>
-    </div>
-
-    <!-- LIBRARY VIEW -->
-    <div id="view-library" class="view">
-      <div class="library-header">
-        <button id="btn-back" class="link-btn">← Back</button>
-        <h2 class="view-title">Your Vault</h2>
-        <button id="btn-export" class="btn-ghost-sm">Export</button>
-      </div>
-
-      <div class="library-filters">
-        <div id="folder-tabs" class="folder-tabs"></div>
-        <select id="category-filter" class="select-input">
-          <option value="">All categories</option>
-        </select>
-      </div>
-
-      <div id="library-grid" class="library-grid"></div>
-      <div id="library-empty" class="empty-state hidden">
-        <div class="empty-icon">📭</div>
-        <p>Nothing saved yet.<br/>Go capture some inspiration!</p>
-      </div>
-    </div>
-
-<!-- Detail View -->
-<div id="view-detail" class="view snpr-detail-view">
-  <!-- Back and Delete buttons -->
-  <div class="snpr-detail-header">
-    <button id="btn-back-detail">← Back</button>
-    <h3 id="detail-title" class="snpr-detail-title"></h3>
-    <button id="btn-delete-detail" class="snpr-detail-delete-btn">Delete</button>
-  </div>
-
-  <!-- Tabs -->
-  <div id="detail-tabs" class="snpr-detail-tabs"></div>
-
-  <!-- Tab Content - Image -->
-  <div id="detail-image-tab" class="snpr-detail-image-tab">
-    <img id="detail-screenshot" alt="Screenshot" class="snpr-detail-screenshot">
-    <div id="detail-no-screenshot" class="snpr-detail-no-screenshot">
-      <span class="snpr-detail-no-shot-icon">📷</span>
-      <span>No screenshot available</span>
-    </div>
-  </div>
-
-  <!-- Tab Content - Code -->
-  <div id="detail-code-tab" class="snpr-detail-code-tab">
-    <div id="detail-code-container"></div>
-  </div>
-
-  <!-- Tab Content - Details -->
-  <div id="detail-info-tab" class="snpr-detail-info-tab">
-    <div class="detail-row">
-      <span class="snpr-detail-row-label"><span>📁</span> Folder</span>
-      <span id="detail-folder">—</span>
-    </div>
-    <div class="detail-row">
-      <span class="snpr-detail-row-label"><span>🔗</span> Source</span>
-      <a id="detail-url" href="#" target="_blank" class="snpr-detail-url"></a>
-    </div>
-    <div class="detail-row">
-      <span class="snpr-detail-row-label"><span>📅</span> Saved</span>
-      <span id="detail-date"></span>
-    </div>
-    <div class="detail-row hidden" id="detail-categories-row">
-      <span class="snpr-detail-row-label"><span>🏷️</span> Tags</span>
-      <div id="detail-categories"></div>
-    </div>
-    <div class="detail-row hidden" id="detail-note-row">
-      <span class="snpr-detail-row-label"><span>📝</span> Note</span>
-      <span id="detail-note" class="snpr-detail-note"></span>
-    </div>
-  </div>
-</div>
-
-    <!-- SETTINGS VIEW -->
-    <div id="view-settings" class="view">
-      <div class="library-header">
-        <button id="btn-back-settings" class="link-btn">← Back</button>
-        <h2 class="view-title">Settings</h2>
-      </div>
-
-      <section class="settings-section">
-        <h3 class="settings-title">Folders</h3>
-        <div id="folder-manager"></div>
-        <div class="inline-add">
-          <input id="new-folder-name" type="text" placeholder="Folder name…" class="text-input" />
-          <input id="new-folder-icon" type="text" placeholder="📁" class="text-input icon-input" />
-          <button id="btn-create-folder" class="btn-ghost-sm">Add</button>
+      <!-- LIBRARY VIEW -->
+      <div id="view-library" class="view">
+        <div class="view-inner-header">
+          <h2 class="view-title">Library</h2>
+          <button id="btn-export" class="btn-ghost-sm">Export</button>
         </div>
-      </section>
+        <div class="library-filters">
+          <div id="folder-tabs" class="folder-tabs"></div>
+          <select id="category-filter" class="select-input">
+            <option value="">All categories</option>
+          </select>
+        </div>
+        <div id="library-grid" class="library-grid"></div>
+        <div id="library-empty" class="empty-state hidden">
+          <div class="empty-icon">📭</div>
+          <p>Nothing saved yet.<br/>Go capture some inspiration!</p>
+        </div>
+      </div>
 
-      <section class="settings-section">
-        <h3 class="settings-title">Categories</h3>
-        <div id="category-manager"></div>
-      </section>
+      <!-- DETAIL VIEW -->
+      <div id="view-detail" class="view snpr-detail-view">
+        <div class="snpr-detail-header">
+          <button id="btn-back-detail">← Back</button>
+          <h3 id="detail-title" class="snpr-detail-title"></h3>
+          <button id="btn-delete-detail" class="snpr-detail-delete-btn">Delete</button>
+        </div>
+        <div id="detail-tabs" class="snpr-detail-tabs"></div>
+        <div id="detail-image-tab" class="snpr-detail-image-tab">
+          <img id="detail-screenshot" alt="Screenshot" class="snpr-detail-screenshot">
+          <div id="detail-no-screenshot" class="snpr-detail-no-screenshot">
+            <span class="snpr-detail-no-shot-icon">📷</span>
+            <span>No screenshot available</span>
+          </div>
+        </div>
+        <div id="detail-code-tab" class="snpr-detail-code-tab">
+          <div id="detail-code-container"></div>
+        </div>
+        <div id="detail-info-tab" class="snpr-detail-info-tab">
+          <div class="detail-row">
+            <span class="snpr-detail-row-label"><span>📁</span> Folder</span>
+            <span id="detail-folder">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="snpr-detail-row-label"><span>🔗</span> Source</span>
+            <a id="detail-url" href="#" target="_blank" class="snpr-detail-url"></a>
+          </div>
+          <div class="detail-row">
+            <span class="snpr-detail-row-label"><span>📅</span> Saved</span>
+            <span id="detail-date"></span>
+          </div>
+          <div class="detail-row hidden" id="detail-categories-row">
+            <span class="snpr-detail-row-label"><span>🏷️</span> Tags</span>
+            <div id="detail-categories"></div>
+          </div>
+          <div class="detail-row hidden" id="detail-note-row">
+            <span class="snpr-detail-row-label"><span>📝</span> Note</span>
+            <span id="detail-note" class="snpr-detail-note"></span>
+          </div>
+        </div>
+      </div>
 
-      <section class="settings-section">
-        <h3 class="settings-title">Account</h3>
-        <button type="button" id="btn-sign-out" class="btn-ghost-sm btn-sign-out">Sign out</button>
-      </section>
-    </div>
+      <!-- SETTINGS VIEW -->
+      <div id="view-settings" class="view">
+        <div class="view-inner-header">
+          <h2 class="view-title">Settings</h2>
+        </div>
+        <section class="settings-section">
+          <h3 class="settings-title">Folders</h3>
+          <div id="folder-manager"></div>
+          <div class="inline-add">
+            <input id="new-folder-name" type="text" placeholder="Folder name…" class="text-input" />
+            <input id="new-folder-icon" type="text" placeholder="📁" class="text-input icon-input" />
+            <button id="btn-create-folder" class="btn-ghost-sm">Add</button>
+          </div>
+        </section>
+        <section class="settings-section">
+          <h3 class="settings-title">Categories</h3>
+          <div id="category-manager"></div>
+        </section>
+      </div>
+
+    </div><!-- /.snipr-body -->
+
+    <!-- Bottom Tab Bar -->
+    <nav class="snipr-tab-bar">
+      <button class="tab-btn active" data-view="capture">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        <span>Home</span>
+      </button>
+      <button class="tab-btn" data-view="library">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
+        <span>Library</span>
+      </button>
+      <button class="tab-btn" data-view="settings">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.2 7.2 0 0 0-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.47.47 0 0 0 .12.61l2.03 1.58c-.05.3-.07.63-.07.94s.02.64.07.94l-2.03 1.58a.47.47 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.49.37 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.47.47 0 0 0-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
 
     <!-- Toast -->
     <div id="toast" class="toast hidden"></div>
 
   </div>
-  <script src="auth/firebase-auth.bundle.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
