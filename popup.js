@@ -309,36 +309,58 @@ function renderCategoryChips() {
 }
 
 // ── Save (with screenshot capture) ───────────────────────────────────────────
+function setSnipProgress(step, total, label) {
+  const el = $("snip-progress");
+  const fill = $("snip-progress-fill");
+  const lbl = $("snip-progress-label");
+  el.classList.remove("hidden");
+  fill.style.width = `${Math.round((step / total) * 100)}%`;
+  lbl.textContent = label;
+}
+
+function hideSnipProgress() {
+  $("snip-progress").classList.add("hidden");
+  $("snip-progress-fill").style.width = "0%";
+}
+
 async function saveSelectedSections() {
   if (!state.selectedSections.length) return showToast("Select at least one section", "error");
   if (!state.selectedFolderId) return showToast("Pick a folder first", "error");
 
   const saveBtn = $("btn-save");
-  const originalText = saveBtn.textContent;
-  saveBtn.textContent = "Snipping…";
   saveBtn.disabled = true;
+  saveBtn.textContent = "Snipping…";
+
+  const total = state.selectedSections.length;
+  // Steps: N capture steps + 1 save step = total + 1
+  const totalSteps = total + 1;
 
   try {
-    const sectionsWithScreenshots = await Promise.all(
-      state.selectedSections.map(async (section) => {
-        try {
-          console.log("Processing section:", section.id, section.label);
-          const screenshot = await captureSectionScreenshot(section.id);
-          console.log("Screenshot result for", section.id, ":", screenshot ? "success" : "null");
-          
-          return {
-            ...section,
-            screenshot: screenshot,
-          };
-        } catch (err) {
-          console.error(`Error capturing section ${section.id}:`, err);
-          return { ...section, screenshot: null };
-        }
-      })
-    );
+    const tab = await getActiveTab();
+    const sectionsWithScreenshots = [];
 
-    console.log("Sections with screenshots:", sectionsWithScreenshots);
+    for (let i = 0; i < total; i++) {
+      const section = state.selectedSections[i];
+      setSnipProgress(i, totalSteps, `Step ${i + 1} of ${total}: capturing "${section.label}"…`);
 
+      try {
+        const screenshot = await captureSectionScreenshot(section.id);
+        const assetsRes = await chrome.tabs.sendMessage(
+          tab.id,
+          { type: "GET_SECTION_ASSETS", sectionId: section.id }
+        ).catch(() => null);
+        sectionsWithScreenshots.push({
+          ...section,
+          screenshot: screenshot || null,
+          assets: assetsRes?.assets || null,
+        });
+      } catch (err) {
+        console.error(`Error capturing section ${section.id}:`, err);
+        sectionsWithScreenshots.push({ ...section, screenshot: null, assets: null });
+      }
+    }
+
+    setSnipProgress(total, totalSteps, "Saving…");
     saveBtn.textContent = "Saving…";
 
     const res = await chrome.runtime.sendMessage({
@@ -349,12 +371,14 @@ async function saveSelectedSections() {
       note: $("note-input").value.trim(),
     });
 
-    console.log("Save response:", res);
-
-    saveBtn.textContent = originalText;
-    saveBtn.disabled = false;
-
     if (res.ok) {
+      setSnipProgress(totalSteps, totalSteps, "Done!");
+      setTimeout(() => {
+        hideSnipProgress();
+        saveBtn.textContent = "Save Snip ✂";
+        saveBtn.disabled = false;
+      }, 600);
+
       showToast(`✂ Snipped ${res.saved} section${res.saved !== 1 ? "s" : ""}!`);
       state.selectedSections = [];
       state.selectedCategories.clear();
@@ -366,13 +390,17 @@ async function saveSelectedSections() {
       $("section-count").textContent = "0 sections found";
       $("empty-state").classList.remove("hidden");
     } else {
+      hideSnipProgress();
+      saveBtn.textContent = "Save Snip ✂";
+      saveBtn.disabled = false;
       showToast("Failed to save sections", "error");
     }
   } catch (err) {
     console.error("Save failed:", err);
-    showToast("Error saving sections", "error");
-    saveBtn.textContent = originalText;
+    hideSnipProgress();
+    saveBtn.textContent = "Save Snip ✂";
     saveBtn.disabled = false;
+    showToast("Error saving sections", "error");
   }
 }
 
@@ -737,6 +765,10 @@ function openDetailView(save) {
     noteRow.classList.add("hidden");
   }
 
+  const assetsContainer = $("detail-assets");
+  assetsContainer.innerHTML = renderDetailAssets(save.assets);
+  wireAssetClicks(assetsContainer);
+
   showView("detail");
 }
 
@@ -763,6 +795,177 @@ function escapeHtml(text) {
     "'": "&#039;",
   };
   return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+// ── Asset display helpers ─────────────────────────────────────────────────────
+
+function sanitizeSvg(svgHtml) {
+  try {
+    const doc = new DOMParser().parseFromString(svgHtml, "image/svg+xml");
+    doc.querySelectorAll("script").forEach(s => s.remove());
+    doc.querySelectorAll("*").forEach(el => {
+      [...el.attributes].forEach(attr => {
+        if (attr.name.startsWith("on")) el.removeAttribute(attr.name);
+      });
+    });
+    return new XMLSerializer().serializeToString(doc.documentElement);
+  } catch (_) {
+    return "";
+  }
+}
+
+function safeImageUrl(url) {
+  try {
+    const u = new URL(url);
+    return (u.protocol === "https:" || u.protocol === "http:") ? url : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+async function copyImageToClipboard(url) {
+  const resp = await fetch(url);
+  const srcBlob = await resp.blob();
+
+  let pngBlob;
+  if (srcBlob.type === "image/png") {
+    pngBlob = srcBlob;
+  } else {
+    const bmp = await createImageBitmap(srcBlob);
+    const canvas = document.createElement("canvas");
+    canvas.width  = bmp.width;
+    canvas.height = bmp.height;
+    canvas.getContext("2d").drawImage(bmp, 0, 0);
+    bmp.close();
+    pngBlob = await new Promise(res => canvas.toBlob(res, "image/png"));
+  }
+
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
+}
+
+function flashCopied(el) {
+  el.classList.add("asset-copied");
+  setTimeout(() => el.classList.remove("asset-copied"), 900);
+}
+
+function wireAssetClicks(container) {
+  // ── Color swatches ────────────────────────────────────────────────────────
+  container.querySelectorAll(".asset-color-swatch[data-color]").forEach(swatch => {
+    swatch.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(swatch.dataset.color);
+        flashCopied(swatch);
+        showToast(`Copied ${swatch.dataset.color}`);
+      } catch (_) {
+        showToast("Failed to copy color", "error");
+      }
+    });
+  });
+
+  // ── Image thumbnails ──────────────────────────────────────────────────────
+  container.querySelectorAll(".asset-image-thumb[data-img-url]").forEach(thumb => {
+    thumb.addEventListener("click", async () => {
+      const url = thumb.dataset.imgUrl;
+      try {
+        await copyImageToClipboard(url);
+        flashCopied(thumb);
+        showToast("Image copied to clipboard");
+      } catch (_) {
+        // Fallback: copy the URL as text
+        try {
+          await navigator.clipboard.writeText(url);
+          flashCopied(thumb);
+          showToast("Image URL copied");
+        } catch (_2) {
+          showToast("Failed to copy image", "error");
+        }
+      }
+    });
+  });
+
+  // ── SVG thumbnails ────────────────────────────────────────────────────────
+  container.querySelectorAll(".asset-svg-thumb").forEach(thumb => {
+    thumb.addEventListener("click", async () => {
+      try {
+        const svgEl = thumb.querySelector("svg");
+        const markup = svgEl ? svgEl.outerHTML : "";
+        if (!markup) { showToast("No SVG markup found", "error"); return; }
+        await navigator.clipboard.writeText(markup);
+        flashCopied(thumb);
+        showToast("SVG copied to clipboard");
+      } catch (_) {
+        showToast("Failed to copy SVG", "error");
+      }
+    });
+  });
+}
+
+function renderDetailAssets(assets) {
+  if (!assets) return "";
+  const { fonts = [], colors = [], images = [], svgs = [] } = assets;
+  if (!fonts.length && !colors.length && !images.length && !svgs.length) return "";
+
+  let html = '<div class="detail-assets-divider"></div>';
+
+  if (colors.length) {
+    html += `
+      <div class="asset-section">
+        <div class="asset-section-title">Colors <span class="asset-hint">click to copy</span></div>
+        <div class="asset-colors">
+          ${colors.map(c => `
+            <div class="asset-color-swatch" data-color="${c}" style="background:${c}">
+              <span class="asset-color-label">${c}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>`;
+  }
+
+  if (fonts.length) {
+    html += `
+      <div class="asset-section">
+        <div class="asset-section-title">Fonts</div>
+        <div class="asset-fonts">
+          ${fonts.map(f => `
+            <div class="asset-font-row">
+              <span class="asset-font-name" style="font-family:'${f}',sans-serif">${f}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>`;
+  }
+
+  if (images.length) {
+    const thumbs = images
+      .map(safeImageUrl)
+      .filter(Boolean)
+      .map(src => `<div class="asset-image-thumb" data-img-url="${escapeHtml(src)}" title="Click to copy image"><img src="${src}" alt="" loading="lazy" /></div>`)
+      .join("");
+    if (thumbs) {
+      html += `
+        <div class="asset-section">
+          <div class="asset-section-title">Images <span class="asset-hint">click to copy</span></div>
+          <div class="asset-images">${thumbs}</div>
+        </div>`;
+    }
+  }
+
+  if (svgs.length) {
+    const thumbs = svgs
+      .map(sanitizeSvg)
+      .filter(Boolean)
+      .map(s => `<div class="asset-svg-thumb" title="Click to copy SVG">${s}</div>`)
+      .join("");
+    if (thumbs) {
+      html += `
+        <div class="asset-section">
+          <div class="asset-section-title">SVGs <span class="asset-hint">click to copy</span></div>
+          <div class="asset-svgs">${thumbs}</div>
+        </div>`;
+    }
+  }
+
+  return html;
 }
 
 // Extract inline CSS/JS (and external asset URLs) from an element's saved HTML.

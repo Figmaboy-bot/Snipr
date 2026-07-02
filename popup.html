@@ -49,6 +49,12 @@
           </div>
           <label class="field-label">Note <span class="optional">(optional)</span></label>
           <textarea id="note-input" class="text-area" placeholder="What do you like about this?"></textarea>
+          <div id="snip-progress" class="snip-progress hidden">
+            <div class="snip-progress-bar">
+              <div id="snip-progress-fill" class="snip-progress-fill"></div>
+            </div>
+            <p id="snip-progress-label" class="snip-progress-label"></p>
+          </div>
           <button id="btn-save" class="btn-save">Save Snip ✂</button>
         </div>
 
@@ -116,6 +122,7 @@
             <span class="snpr-detail-row-label"><span>📝</span> Note</span>
             <span id="detail-note" class="snpr-detail-note"></span>
           </div>
+          <div id="detail-assets"></div>
         </div>
       </div>
 

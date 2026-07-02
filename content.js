@@ -212,6 +212,110 @@
     return result;
   }
 
+  // ── Asset Extraction ─────────────────────────────────────────────────────────
+
+  function rgbToHex(rgb) {
+    const m = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (!m) return null;
+    return "#" + [m[1], m[2], m[3]]
+      .map(v => parseInt(v, 10).toString(16).padStart(2, "0"))
+      .join("").toUpperCase();
+  }
+
+  const SYSTEM_FONTS = new Set([
+    "-apple-system", "blinkmacsystemfont", "segoe ui", "system-ui",
+    "arial", "helvetica", "times new roman", "courier new", "georgia",
+    "verdana", "tahoma", "trebuchet ms", "impact", "comic sans ms",
+    "serif", "sans-serif", "monospace", "cursive", "fantasy",
+  ]);
+
+  function extractAssets(sectionEl) {
+    const fontsMap  = new Map(); // font → count
+    const colorsMap = new Map(); // hex  → count
+    const images    = [];
+    const svgs      = [];
+
+    const allEls = [sectionEl, ...sectionEl.querySelectorAll("*")];
+
+    allEls.forEach(node => {
+      if (node.classList?.contains("dv-badge")) return;
+
+      // ── Computed styles ──────────────────────────────────────────────────
+      let style;
+      try { style = window.getComputedStyle(node); } catch (_) { return; }
+
+      // Fonts
+      const ff = style.fontFamily || "";
+      ff.split(",").forEach(f => {
+        const clean = f.trim().replace(/^["']|["']$/g, "").trim().toLowerCase();
+        if (clean && !SYSTEM_FONTS.has(clean)) {
+          // Restore original casing from the raw string
+          const original = f.trim().replace(/^["']|["']$/g, "").trim();
+          fontsMap.set(original, (fontsMap.get(original) || 0) + 1);
+        }
+      });
+
+      // Colors (text + background)
+      ["color", "backgroundColor"].forEach(prop => {
+        const val = style[prop];
+        if (!val || val === "rgba(0, 0, 0, 0)" || val === "transparent") return;
+        const hex = rgbToHex(val);
+        if (hex) colorsMap.set(hex, (colorsMap.get(hex) || 0) + 1);
+      });
+
+      // SVG fill/stroke
+      if (node.namespaceURI === "http://www.w3.org/2000/svg") {
+        ["fill", "stroke"].forEach(prop => {
+          const val = style[prop];
+          if (!val || val === "none" || val === "rgba(0, 0, 0, 0)") return;
+          const hex = rgbToHex(val);
+          if (hex) colorsMap.set(hex, (colorsMap.get(hex) || 0) + 1);
+        });
+      }
+
+      // ── <img> elements ───────────────────────────────────────────────────
+      if (node.tagName === "IMG") {
+        const src = node.src || node.getAttribute("src") || "";
+        if (src && !src.startsWith("data:") && !images.includes(src)) {
+          images.push(src);
+        }
+      }
+
+      // ── CSS background-image URLs ────────────────────────────────────────
+      const bgImg = style.backgroundImage;
+      if (bgImg && bgImg !== "none") {
+        const urlRe = /url\(["']?([^"')]+)["']?\)/g;
+        let match;
+        while ((match = urlRe.exec(bgImg)) !== null) {
+          const src = match[1];
+          if (!src.startsWith("data:") && !images.includes(src)) {
+            try {
+              images.push(new URL(src, location.href).href);
+            } catch (_) {}
+          }
+        }
+      }
+
+      // ── Root-level inline SVGs ───────────────────────────────────────────
+      const tag = node.tagName && node.tagName.toLowerCase();
+      if (tag === "svg" && !node.parentElement?.closest("svg")) {
+        const str = node.outerHTML || "";
+        if (str.length < 12000) svgs.push(str);
+      }
+    });
+
+    // Sort by frequency, take top values
+    const sortByCount = map =>
+      [...map.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
+
+    return {
+      fonts:  sortByCount(fontsMap).slice(0, 12),
+      colors: sortByCount(colorsMap).slice(0, 28),
+      images: images.slice(0, 20),
+      svgs:   svgs.slice(0, 12),
+    };
+  }
+
   // ── Message Bridge ─────────────────────────────────────────────────────────
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -272,6 +376,17 @@
             console.log("Captured rect:", rect);
             sendResponse({ rect });
           }, 120);
+          break;
+        }
+
+        case "GET_SECTION_ASSETS": {
+          const section = detectedSections.find(s => s.id === message.sectionId);
+          if (!section) {
+            sendResponse({ assets: null });
+            break;
+          }
+          const assets = extractAssets(section.el);
+          sendResponse({ assets });
           break;
         }
 

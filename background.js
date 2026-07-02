@@ -127,6 +127,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           pageTitle: section.title,
           savedAt: Date.now(),
           screenshot: section.screenshot || null,
+          assets: section.assets || null,
         }));
 
         await chrome.storage.local.set({ saves: [...saves, ...newSaves] });
