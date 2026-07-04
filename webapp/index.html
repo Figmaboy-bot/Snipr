@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Snipr — Your Library</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ── Auth screen ─────────────────────────────────────────────────────── -->
+  <div id="screen-auth" class="screen-auth hidden">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <span class="logo-text">Snipr</span>
+      </div>
+      <p class="auth-sub">Sign in to browse the snips you saved<br/>with the Snipr extension.</p>
+
+      <input id="auth-email" type="email" placeholder="Email" class="text-input" autocomplete="email" />
+      <input id="auth-password" type="password" placeholder="Password" class="text-input" autocomplete="current-password" />
+      <div class="auth-btn-row">
+        <button id="btn-sign-in" class="btn-primary">Sign in</button>
+        <button id="btn-sign-up" class="btn-ghost">Sign up</button>
+      </div>
+      <div class="auth-divider"><span>or</span></div>
+      <button id="btn-google" class="btn-google">
+        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Continue with Google
+      </button>
+      <p id="auth-error" class="auth-error hidden"></p>
+    </div>
+  </div>
+
+  <!-- ── App screen ──────────────────────────────────────────────────────── -->
+  <div id="screen-app" class="screen-app hidden">
+    <header class="app-nav">
+      <div class="logo">
+        <span class="logo-text">Snipr</span>
+        <span class="logo-badge">Library</span>
+      </div>
+      <div class="nav-right">
+        <span id="user-email" class="user-email"></span>
+        <button id="btn-sign-out" class="btn-ghost-sm">Sign out</button>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <div class="library-toolbar">
+        <div id="folder-tabs" class="folder-tabs"></div>
+        <select id="category-filter" class="select-input">
+          <option value="">All categories</option>
+        </select>
+      </div>
+
+      <div id="library-grid" class="library-grid"></div>
+
+      <div id="library-empty" class="empty-state hidden">
+        <div class="empty-icon">✂</div>
+        <p>Nothing here yet.<br/>Save sections with the Snipr extension — signed in with the same account — and they'll appear here.</p>
+      </div>
+
+      <div id="library-loading" class="empty-state">
+        <div class="empty-icon">☁</div>
+        <p>Loading your library…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Detail modal ────────────────────────────────────────────────────── -->
+  <div id="detail-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="detail-title" class="modal-title"></h3>
+        <div class="modal-header-actions">
+          <button id="btn-delete-detail" class="btn-danger-sm">Delete</button>
+          <button id="btn-close-detail" class="btn-ghost-sm">✕</button>
+        </div>
+      </div>
+      <div id="detail-tabs" class="detail-tabs">
+        <div class="detail-tab active" data-tab="image">📷 Image</div>
+        <div class="detail-tab" data-tab="code">&lt;/&gt; Code</div>
+        <div class="detail-tab" data-tab="details">ℹ️ Details</div>
+      </div>
+
+      <div id="detail-image-tab" class="detail-pane">
+        <img id="detail-screenshot" alt="Screenshot" class="detail-screenshot">
+        <div id="detail-no-screenshot" class="detail-no-screenshot hidden">
+          <span>📷</span><span>No screenshot available</span>
+        </div>
+      </div>
+
+      <div id="detail-code-tab" class="detail-pane hidden">
+        <div class="code-toolbar">
+          <select id="code-type-select" class="select-input"></select>
+          <button id="btn-copy-code" class="btn-ghost-sm">Copy</button>
+        </div>
+        <pre id="detail-code-pre" class="code-block"><code id="detail-current-code"></code></pre>
+      </div>
+
+      <div id="detail-info-tab" class="detail-pane hidden">
+        <div class="detail-row"><span class="detail-row-label">📁 Folder</span><span id="detail-folder">—</span></div>
+        <div class="detail-row"><span class="detail-row-label">🔗 Source</span><a id="detail-url" href="#" target="_blank" rel="noopener" class="detail-url"></a></div>
+        <div class="detail-row"><span class="detail-row-label">📅 Saved</span><span id="detail-date"></span></div>
+        <div class="detail-row hidden" id="detail-categories-row"><span class="detail-row-label">🏷️ Tags</span><div id="detail-categories"></div></div>
+        <div class="detail-row hidden" id="detail-note-row"><span class="detail-row-label">📝 Note</span><span id="detail-note"></span></div>
+        <div id="detail-assets"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.bundle.js"></script>
+</body>
+</html>

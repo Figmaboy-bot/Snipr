@@ -132,6 +132,29 @@
           <h2 class="view-title">Settings</h2>
         </div>
         <section class="settings-section">
+          <h3 class="settings-title">Account &amp; Cloud Sync</h3>
+          <div id="auth-signed-out" class="auth-box">
+            <p class="auth-hint">Sign in to sync your snips to the Snipr web app.</p>
+            <input id="auth-email" type="email" placeholder="Email" class="text-input" autocomplete="email" />
+            <input id="auth-password" type="password" placeholder="Password" class="text-input" autocomplete="current-password" />
+            <div class="auth-btn-row">
+              <button id="btn-sign-in" class="btn-ghost-sm">Sign in</button>
+              <button id="btn-sign-up" class="btn-ghost-sm">Sign up</button>
+            </div>
+            <button id="btn-google" class="btn-ghost-sm auth-google-btn">Continue with Google</button>
+            <p id="auth-error" class="auth-error hidden"></p>
+          </div>
+          <div id="auth-signed-in" class="auth-box hidden">
+            <p class="auth-status">Signed in as <strong id="auth-user-email"></strong></p>
+            <p class="auth-hint">New snips sync to your web app library automatically.</p>
+            <div class="auth-btn-row">
+              <button id="btn-sync-all" class="btn-ghost-sm">Sync all local snips</button>
+              <button id="btn-sign-out" class="btn-ghost-sm">Sign out</button>
+            </div>
+            <p id="sync-status" class="auth-hint hidden"></p>
+          </div>
+        </section>
+        <section class="settings-section">
           <h3 class="settings-title">Folders</h3>
           <div id="folder-manager"></div>
           <div class="inline-add">
@@ -168,6 +191,7 @@
     <div id="toast" class="toast hidden"></div>
 
   </div>
+  <script src="auth/firebase-auth.bundle.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

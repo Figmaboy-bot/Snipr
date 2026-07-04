@@ -372,6 +372,7 @@ async function saveSelectedSections() {
     });
 
     if (res.ok) {
+      cloudPushSavesSafe(res.saves).catch(() => {});
       setSnipProgress(totalSteps, totalSteps, "Done!");
       setTimeout(() => {
         hideSnipProgress();
@@ -495,6 +496,7 @@ function renderLibrary(saves) {
     card.querySelector(".delete-btn").addEventListener("click", async (e) => {
       e.stopPropagation();
       await chrome.runtime.sendMessage({ type: "DELETE_SAVE", saveId: save.id });
+      cloudDeleteSaveSafe(save.id);
       loadLibrary();
     });
 
@@ -1008,6 +1010,14 @@ function extractCodeParts(sectionHtml) {
       const href = l.getAttribute("href");
       if (href) parts.externals.css.push(href);
     });
+
+    // The HTML tab should show pure markup — strip the <style>/<script> tags
+    // now that their contents live in the CSS/JS tabs, so each tab shows one
+    // language instead of HTML duplicating what CSS/JS already show.
+    cssStyles.forEach(s => s.remove());
+    scriptEls.forEach(s => s.remove());
+    const root = doc.body.firstElementChild;
+    parts.html = (root ? root.outerHTML : doc.body.innerHTML).trim();
   } catch (_e) {
     // Best-effort extraction only.
   }
@@ -1045,6 +1055,209 @@ function buildCodeBundleText(parts) {
   return lines.join("\n");
 }
 
+// ── Cloud sync (Firebase / web app) ───────────────────────────────────────────
+// When the user is signed in, every save is mirrored to Firestore under
+// users/{uid}/saves so the Snipr web app can show the same library.
+
+const cloud = {
+  ready: false,
+  user: null,
+};
+
+function cloudAvailable() {
+  return cloud.ready && !!cloud.user;
+}
+
+function initCloud() {
+  const api = window.SnprFirebaseAuth;
+  if (!api) return;
+  const res = api.initFirebase();
+  if (!res.ok) {
+    console.warn("Snipr: Firebase not configured —", res.error);
+    return;
+  }
+  cloud.ready = true;
+  api.subscribeAuth(user => {
+    cloud.user = user || null;
+    renderAuthUI();
+  });
+}
+
+// Firestore documents are capped at 1MB, so screenshots are re-encoded as
+// bounded JPEGs and giant HTML is truncated before upload.
+async function compressScreenshotForCloud(dataUrl) {
+  if (!dataUrl) return null;
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = dataUrl;
+    });
+    const maxW = 1200;
+    const scale = Math.min(1, maxW / img.width);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+    let out = canvas.toDataURL("image/jpeg", 0.8);
+    if (out.length > 600_000) out = canvas.toDataURL("image/jpeg", 0.5);
+    if (out.length > 600_000) return null;
+    return out;
+  } catch (_e) {
+    return null;
+  }
+}
+
+async function prepareSaveForCloud(save) {
+  const MAX_HTML = 250_000;
+  const html = save.html && save.html.length > MAX_HTML
+    ? save.html.slice(0, MAX_HTML) + "\n<!-- truncated for cloud sync -->"
+    : (save.html || "");
+
+  const assets = save.assets
+    ? {
+        fonts: (save.assets.fonts || []).slice(0, 20),
+        colors: (save.assets.colors || []).slice(0, 30),
+        images: (save.assets.images || []).slice(0, 24),
+        svgs: (save.assets.svgs || []).filter(s => s.length < 20_000).slice(0, 12),
+      }
+    : null;
+
+  const screenshot = await compressScreenshotForCloud(save.screenshot);
+
+  const cloudSave = { ...save, html, assets, screenshot };
+  // Rough total-size guard: drop the screenshot before failing the write.
+  if (JSON.stringify(cloudSave).length > 950_000) cloudSave.screenshot = null;
+  return cloudSave;
+}
+
+async function cloudPushSavesSafe(saves) {
+  if (!cloudAvailable() || !saves?.length) return;
+  try {
+    const prepared = [];
+    for (const save of saves) prepared.push(await prepareSaveForCloud(save));
+    await window.SnprFirebaseAuth.cloudPushSaves(prepared);
+    await cloudSyncMetaSafe();
+    showToast(`☁ Synced ${prepared.length} snip${prepared.length !== 1 ? "s" : ""} to web app`);
+  } catch (err) {
+    console.error("Snipr: cloud sync failed", err);
+    showToast("Cloud sync failed — saved locally", "error");
+  }
+}
+
+async function cloudDeleteSaveSafe(saveId) {
+  if (!cloudAvailable()) return;
+  try {
+    await window.SnprFirebaseAuth.cloudDeleteSave(saveId);
+  } catch (err) {
+    console.error("Snipr: cloud delete failed", err);
+  }
+}
+
+async function cloudSyncMetaSafe() {
+  if (!cloudAvailable()) return;
+  try {
+    await window.SnprFirebaseAuth.cloudSyncMeta(state.folders, state.categories);
+  } catch (err) {
+    console.error("Snipr: meta sync failed", err);
+  }
+}
+
+async function cloudSyncAllSaves() {
+  if (!cloudAvailable()) return showToast("Sign in first", "error");
+  const statusEl = $("sync-status");
+  statusEl.classList.remove("hidden");
+  statusEl.textContent = "Syncing…";
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "GET_SAVES" });
+    const saves = res.saves || [];
+    if (!saves.length) {
+      statusEl.textContent = "Nothing to sync.";
+      return;
+    }
+    const prepared = [];
+    for (let i = 0; i < saves.length; i++) {
+      statusEl.textContent = `Preparing ${i + 1} of ${saves.length}…`;
+      prepared.push(await prepareSaveForCloud(saves[i]));
+    }
+    statusEl.textContent = "Uploading…";
+    // Push in chunks to stay well under Firestore batch limits.
+    for (let i = 0; i < prepared.length; i += 100) {
+      await window.SnprFirebaseAuth.cloudPushSaves(prepared.slice(i, i + 100));
+    }
+    await cloudSyncMetaSafe();
+    statusEl.textContent = `Synced ${prepared.length} snips ✓`;
+    showToast(`☁ Synced ${prepared.length} snips to web app`);
+  } catch (err) {
+    console.error("Snipr: full sync failed", err);
+    statusEl.textContent = "Sync failed. Try again.";
+    showToast("Sync failed", "error");
+  }
+}
+
+// ── Auth UI (Settings view) ───────────────────────────────────────────────────
+function renderAuthUI() {
+  const signedOut = $("auth-signed-out");
+  const signedIn = $("auth-signed-in");
+  if (!signedOut || !signedIn) return;
+  if (cloud.user) {
+    signedOut.classList.add("hidden");
+    signedIn.classList.remove("hidden");
+    $("auth-user-email").textContent = cloud.user.email || cloud.user.displayName || "account";
+  } else {
+    signedIn.classList.add("hidden");
+    signedOut.classList.remove("hidden");
+  }
+}
+
+function showAuthError(msg) {
+  const el = $("auth-error");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+
+function wireAuthEvents() {
+  const api = () => window.SnprFirebaseAuth;
+
+  $("btn-sign-in")?.addEventListener("click", async () => {
+    try {
+      $("auth-error").classList.add("hidden");
+      await api().signInEmailPassword($("auth-email").value.trim(), $("auth-password").value);
+      showToast("Signed in");
+    } catch (err) {
+      showAuthError(err.message || "Sign in failed");
+    }
+  });
+
+  $("btn-sign-up")?.addEventListener("click", async () => {
+    try {
+      $("auth-error").classList.add("hidden");
+      await api().signUpEmailPassword($("auth-email").value.trim(), $("auth-password").value);
+      showToast("Account created");
+    } catch (err) {
+      showAuthError(err.message || "Sign up failed");
+    }
+  });
+
+  $("btn-google")?.addEventListener("click", async () => {
+    try {
+      $("auth-error").classList.add("hidden");
+      await api().signInWithGoogleChrome();
+      showToast("Signed in with Google");
+    } catch (err) {
+      showAuthError(err.message || "Google sign-in failed");
+    }
+  });
+
+  $("btn-sign-out")?.addEventListener("click", async () => {
+    await api().signOutUser();
+    showToast("Signed out");
+  });
+
+  $("btn-sync-all")?.addEventListener("click", cloudSyncAllSaves);
+}
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 function renderFolderManager() {
   const el = $("folder-manager");
@@ -1061,6 +1274,7 @@ function renderFolderManager() {
       await chrome.runtime.sendMessage({ type: "DELETE_FOLDER", folderId: f.id });
       state.folders = state.folders.filter(x => x.id !== f.id);
       renderFolderManager();
+      cloudSyncMetaSafe();
     });
     el.appendChild(row);
   });
@@ -1112,6 +1326,7 @@ function wireEvents() {
     state.categories.push(val);
     $("new-category-input").value = "";
     renderCategoryChips();
+    cloudSyncMetaSafe();
   });
   $("new-category-input").addEventListener("keydown", e => {
     if (e.key === "Enter") $("btn-add-category").click();
@@ -1129,6 +1344,7 @@ function wireEvents() {
   $("btn-delete-detail").addEventListener("click", async () => {
     if (!state.detailSave) return;
     await chrome.runtime.sendMessage({ type: "DELETE_SAVE", saveId: state.detailSave.id });
+    cloudDeleteSaveSafe(state.detailSave.id);
     state.detailSave = null;
     await loadLibrary();
     showView("library");
@@ -1162,6 +1378,7 @@ function wireEvents() {
       $("new-folder-icon").value = "";
       renderFolderManager();
       showToast(`Folder "${name}" created`);
+      cloudSyncMetaSafe();
     }
   });
 
@@ -1170,6 +1387,8 @@ function wireEvents() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async () => {
   wireEvents();
+  wireAuthEvents();
+  initCloud();
   await loadBootstrap();
   showView("capture");
   const tab = await getActiveTab();

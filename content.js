@@ -63,8 +63,20 @@
       return 0;
     });
 
-    return all
-      .filter(el => {
+    const labeled = all.map(el => ({ el, label: labelFromElement(el) }));
+
+    // Drop elements whose ancestor is also a candidate with the same label —
+    // e.g. <nav class="navbar"> wrapping <div class="navbar-menu"> wrapping
+    // <div class="navbar-links"> would otherwise report "Navbar" 3x. Different
+    // labels are still allowed to nest (e.g. Main containing a Hero).
+    const deduped = labeled.filter(({ el, label }) =>
+      !labeled.some(other =>
+        other.el !== el && other.label === label && other.el.contains(el)
+      )
+    );
+
+    return deduped
+      .filter(({ el }) => {
         const rect = el.getBoundingClientRect();
         const style = window.getComputedStyle(el);
         return (
@@ -74,9 +86,9 @@
           rect.height > 40
         );
       })
-      .map((el, idx) => ({
+      .map(({ el, label }, idx) => ({
         id: `dv-section-${idx}`,
-        label: labelFromElement(el),
+        label,
         el,
       }));
   }

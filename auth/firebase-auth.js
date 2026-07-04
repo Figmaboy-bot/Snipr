@@ -10,10 +10,19 @@ import {
   GoogleAuthProvider,
   signInWithCredential,
 } from "firebase/auth";
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  deleteDoc,
+  writeBatch,
+  serverTimestamp,
+} from "firebase/firestore";
 import { firebaseConfig } from "../firebase-config.js";
 
 let app;
 let auth;
+let db;
 
 function isConfigReady() {
   return (
@@ -31,9 +40,14 @@ export function initFirebase() {
   if (!app) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
+    db = getFirestore(app);
     setPersistence(auth, browserLocalPersistence).catch(() => {});
   }
   return { ok: true, auth };
+}
+
+export function getCurrentUser() {
+  return auth?.currentUser || null;
 }
 
 export function getFirebaseAuth() {
@@ -92,14 +106,53 @@ export function subscribeAuth(callback) {
   return onAuthStateChanged(auth, callback);
 }
 
+// ── Cloud sync (Firestore) ────────────────────────────────────────────────────
+// Saves live at users/{uid}/saves/{saveId}; folders & categories are mirrored
+// into users/{uid}/meta/config so the web app can render folder names/icons.
+
+function requireUser() {
+  const user = auth?.currentUser;
+  if (!user) throw new Error("Not signed in");
+  return user;
+}
+
+export async function cloudPushSaves(saves) {
+  const user = requireUser();
+  const batch = writeBatch(db);
+  for (const save of saves) {
+    const ref = doc(db, "users", user.uid, "saves", save.id);
+    batch.set(ref, { ...save, syncedAt: serverTimestamp() }, { merge: true });
+  }
+  await batch.commit();
+  return saves.length;
+}
+
+export async function cloudDeleteSave(saveId) {
+  const user = requireUser();
+  await deleteDoc(doc(db, "users", user.uid, "saves", saveId));
+}
+
+export async function cloudSyncMeta(folders, categories) {
+  const user = requireUser();
+  await setDoc(
+    doc(db, "users", user.uid, "meta", "config"),
+    { folders, categories, updatedAt: serverTimestamp() },
+    { merge: true }
+  );
+}
+
 const SnprFirebaseAuth = {
   initFirebase,
   getFirebaseAuth,
+  getCurrentUser,
   signInEmailPassword,
   signUpEmailPassword,
   signInWithGoogleChrome,
   signOutUser,
   subscribeAuth,
+  cloudPushSaves,
+  cloudDeleteSave,
+  cloudSyncMeta,
 };
 
 export default SnprFirebaseAuth;

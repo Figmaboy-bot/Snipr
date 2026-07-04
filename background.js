@@ -131,7 +131,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }));
 
         await chrome.storage.local.set({ saves: [...saves, ...newSaves] });
-        sendResponse({ ok: true, saved: newSaves.length });
+        sendResponse({ ok: true, saved: newSaves.length, saves: newSaves });
         break;
       }
 

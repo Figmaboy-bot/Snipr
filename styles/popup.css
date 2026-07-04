@@ -1124,3 +1124,33 @@ body {
   font-size: 11px;
   color: var(--muted);
 }
+
+/* ── Account & Cloud Sync (Settings) ── */
+.auth-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-box .text-input { width: 100%; }
+
+.auth-btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.auth-btn-row .btn-ghost-sm { flex: 1; }
+
+.auth-google-btn { width: 100%; }
+
+.auth-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.auth-status { font-size: 12px; }
+
+.auth-error {
+  font-size: 11px;
+  color: var(--danger);
+}
