@@ -2,12 +2,16 @@
   "name": "snipr",
   "private": true,
   "scripts": {
-    "build:auth": "node scripts/build-auth.mjs"
+    "build:auth": "node scripts/build-auth.mjs",
+    "build:webapp": "node scripts/build-webapp.mjs",
+    "watch:webapp": "node scripts/build-webapp.mjs --watch",
+    "build": "npm run build:auth && npm run build:webapp"
   },
   "devDependencies": {
     "esbuild": "^0.25.12"
   },
   "dependencies": {
-    "firebase": "^11.10.0"
+    "firebase": "^11.10.0",
+    "firebase-admin": "^12.7.0"
   }
 }

@@ -31,9 +31,43 @@ A Chrome extension to capture and organize website sections by design type and i
 5. Click **Load unpacked**
 6. Select this project folder
 
+## Cloud Sync & Web App
+
+Snips saved from the extension sync to Firestore and show up in the **Snipr web app** (`webapp/`).
+
+1. **Enable Firestore** — in the [Firebase console](https://console.firebase.google.com/) for your project, go to **Build → Firestore Database → Create database** (production mode is fine).
+2. **Set security rules** — paste the contents of `firestore.rules` into **Firestore → Rules** and publish. Each user can only read/write their own vault (`users/{uid}/…`).
+3. **Deploy the extension sign-in endpoint** (one-time; this is a small [Vercel](https://vercel.com) serverless function — no Firebase Blaze plan required):
+   - Get a service account key: Firebase Console → Project Settings → **Service accounts** → **Generate new private key** (downloads a JSON file — keep it secret, never commit it).
+   - Deploy this repo to Vercel (`npx vercel` from the repo root, or connect the repo in the Vercel dashboard). Vercel auto-detects `api/mint-extension-token.js` as a serverless function.
+   - In the Vercel project's **Settings → Environment Variables**, add `FIREBASE_SERVICE_ACCOUNT` with the *entire contents* of that JSON key file as the value.
+   - Note the deployed URL (e.g. `https://your-project.vercel.app`) — you'll need it below.
+   - Add that origin to `ALLOWED_ORIGINS` in `api/mint-extension-token.js` if it differs from `localhost:8123`.
+4. **Point the web app at your deployed endpoint** — update `MINT_TOKEN_URL` near the top of `webapp/src/app.js` to `https://your-project.vercel.app/api/mint-extension-token`.
+5. **Build the web app and auth bundle**:
+   ```bash
+   npm run build   # builds both auth/firebase-auth.bundle.js and webapp/app.bundle.js
+   ```
+6. **Run the web app locally**:
+   ```bash
+   npx serve webapp -l 8123       # or: python3 -m http.server 8123 --directory webapp
+   ```
+   `localhost` is authorized for Firebase Auth by default. To deploy the webapp itself (Firebase Hosting, Vercel, Netlify…):
+   - Serve the `webapp/` folder and add your domain in **Authentication → Settings → Authorized domains**.
+   - Update `WEBAPP_URL` in `popup.js` to your production URL.
+   - Add your production origin to `externally_connectable.matches` in `manifest.json` (replace `YOUR-WEBAPP-PROD-DOMAIN`) and to `ALLOWED_ORIGINS` in `api/mint-extension-token.js`.
+
+### Sign-in flow
+
+Clicking **Sign in** / **Sign up** in the extension popup opens the web app in a new tab — that's where you actually enter credentials (or use Google). Once you're signed in there, the web app hands a one-time token back to the extension (via `api/mint-extension-token.js` + `chrome.runtime.sendMessage`), so the extension signs itself in automatically — no need to re-enter anything. Just reopen the popup afterward and it'll show "Signed in as …". New snips then sync automatically; use **"Sync all local snips"** in the extension settings to upload everything saved before you signed in.
+
+Notes:
+- Screenshots are re-encoded as bounded JPEGs and very large HTML is truncated before upload (Firestore documents are capped at 1 MB). The full-quality copy always stays in the extension's local storage.
+- Deleting a snip in either place removes it from the cloud; local copies in the extension are only removed when deleted from the extension.
+
 ## Usage
 
-1. Open the popup and **sign in** with email/password or **Continue with Google** (session persists across popup opens).
+1. Open the popup and click **Sign in** / **Sign up** — this opens the web app to authenticate (or use **Continue with Google** directly in the popup). Session persists across popup opens.
 2. Navigate to any website
 3. Click the DesignVault icon in your toolbar
 3. The extension auto-scans the page and highlights detected sections
@@ -58,6 +92,15 @@ design-vault/
 ├── styles/
 │   ├── content.css      # Page overlay styles
 │   └── popup.css        # Popup UI styles
+├── webapp/              # Snipr web app (browse your synced library)
+│   ├── index.html
+│   ├── styles.css
+│   ├── src/app.js       # Source (bundled by npm run build:webapp)
+│   └── app.bundle.js    # Built bundle loaded by index.html
+├── firestore.rules      # Firestore security rules (paste into console)
+├── api/
+│   └── mint-extension-token.js  # Vercel serverless function: webapp → extension sign-in handoff
+├── firebase.json        # Firebase CLI config (firestore rules only)
 └── icons/               # Extension icons (add your own PNGs)
 ```
 
@@ -76,5 +119,6 @@ You can use any design tool or generate them online. A simple hexagon works grea
 - [ ] HTML preview in library cards
 - [ ] Search across saved sections
 - [ ] Import from JSON export
-- [ ] Sync to cloud (Firebase / Supabase)
+- [x] Sync to cloud (Firebase)
+- [x] Web app to browse your library
 - [ ] Share collections with a link

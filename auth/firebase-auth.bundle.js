@@ -28,6 +28,7 @@ var SnprFirebaseAuth = (() => {
     getFirebaseAuth: () => getFirebaseAuth,
     initFirebase: () => initFirebase,
     signInEmailPassword: () => signInEmailPassword,
+    signInWithCustomTokenValue: () => signInWithCustomTokenValue,
     signInWithGoogleChrome: () => signInWithGoogleChrome,
     signOutUser: () => signOutUser,
     signUpEmailPassword: () => signUpEmailPassword,
@@ -5684,6 +5685,22 @@ var SnprFirebaseAuth = (() => {
   }
   async function signInWithCredential(auth2, credential) {
     return _signInWithCredential(_castAuth(auth2), credential);
+  }
+  async function signInWithCustomToken$1(auth2, request) {
+    return _performSignInRequest(auth2, "POST", "/v1/accounts:signInWithCustomToken", _addTidIfNecessary(auth2, request));
+  }
+  async function signInWithCustomToken(auth2, customToken) {
+    if (_isFirebaseServerApp(auth2.app)) {
+      return Promise.reject(_serverAppCurrentUserOperationNotSupportedError(auth2));
+    }
+    const authInternal = _castAuth(auth2);
+    const response = await signInWithCustomToken$1(authInternal, {
+      token: customToken,
+      returnSecureToken: true
+    });
+    const cred = await UserCredentialImpl._fromIdTokenResponse(authInternal, "signIn", response);
+    await authInternal._updateCurrentUser(cred.user);
+    return cred;
   }
   async function recachePasswordPolicy(auth2) {
     const authInternal = _castAuth(auth2);
@@ -18572,6 +18589,10 @@ This typically indicates that your device does not have a healthy Internet conne
     if (!auth) throw new Error("Auth not initialized");
     return createUserWithEmailAndPassword(auth, email, password);
   }
+  async function signInWithCustomTokenValue(token) {
+    if (!auth) throw new Error("Auth not initialized");
+    return signInWithCustomToken(auth, token);
+  }
   async function signInWithGoogleChrome() {
     if (!auth) throw new Error("Auth not initialized");
     return new Promise((resolve, reject) => {
@@ -18644,6 +18665,7 @@ This typically indicates that your device does not have a healthy Internet conne
     getCurrentUser,
     signInEmailPassword,
     signUpEmailPassword,
+    signInWithCustomTokenValue,
     signInWithGoogleChrome,
     signOutUser,
     subscribeAuth,
@@ -18826,8 +18848,6 @@ This typically indicates that your device does not have a healthy Internet conne
 
 @firebase/util/dist/index.esm2017.js:
 firebase/app/dist/esm/index.esm.js:
-@firebase/auth/dist/esm2017/index-35c79a8a.js:
-@firebase/auth/dist/esm2017/index-35c79a8a.js:
 @firebase/auth/dist/esm2017/index-35c79a8a.js:
 @firebase/auth/dist/esm2017/index-35c79a8a.js:
 @firebase/auth/dist/esm2017/index-35c79a8a.js:
@@ -20222,4 +20242,4 @@ firebase/app/dist/esm/index.esm.js:
    * limitations under the License.
    *)
 */
-if (typeof SnprFirebaseAuth !== 'undefined' && SnprFirebaseAuth.default) { window.SnprFirebaseAuth = SnprFirebaseAuth.default; } else { window.SnprFirebaseAuth = SnprFirebaseAuth; }
+if (typeof SnprFirebaseAuth !== 'undefined' && SnprFirebaseAuth.default) { self.SnprFirebaseAuth = SnprFirebaseAuth.default; } else { self.SnprFirebaseAuth = SnprFirebaseAuth; }

@@ -14,7 +14,10 @@ await esbuild.build({
   platform: "browser",
   minify: false,
   footer: {
-    js: "if (typeof SnprFirebaseAuth !== 'undefined' && SnprFirebaseAuth.default) { window.SnprFirebaseAuth = SnprFirebaseAuth.default; } else { window.SnprFirebaseAuth = SnprFirebaseAuth; }",
+    // `self` (not `window`) so this bundle works both in popup.html (a
+    // document, where self === window) and in background.js (a service
+    // worker, which has no `window` at all).
+    js: "if (typeof SnprFirebaseAuth !== 'undefined' && SnprFirebaseAuth.default) { self.SnprFirebaseAuth = SnprFirebaseAuth.default; } else { self.SnprFirebaseAuth = SnprFirebaseAuth; }",
   },
 });
 

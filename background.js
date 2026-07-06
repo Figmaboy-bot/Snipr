@@ -1,5 +1,9 @@
 // DesignVault — Background Service Worker
 
+// Loads SnprFirebaseAuth (self.SnprFirebaseAuth) so this service worker can
+// complete the webapp → extension sign-in handoff even when no popup is open.
+importScripts("auth/firebase-auth.bundle.js");
+
 // ── Default Data ──────────────────────────────────────────────────────────────
 
 const DEFAULT_FOLDERS = [
@@ -94,6 +98,31 @@ async function captureAndCrop(tabId, windowId, rect, dpr, viewportWidth, viewpor
     return null;
   }
 }
+
+// ── Webapp → extension sign-in handoff ────────────────────────────────────────
+// The webapp (an origin listed in manifest.json's externally_connectable)
+// sends a custom token here right after a user signs in/up there. Exchanging
+// it establishes a real Firebase Auth session for the extension's own origin
+// — the extension never sees a password.
+
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  if (message?.type !== "SNIPR_AUTH_TOKEN" || !message.token) return false;
+
+  (async () => {
+    try {
+      const api = self.SnprFirebaseAuth;
+      const res = api.initFirebase();
+      if (!res.ok) throw new Error(res.error);
+      await api.signInWithCustomTokenValue(message.token);
+      chrome.runtime.sendMessage({ type: "AUTH_UPDATED" }).catch(() => {});
+      sendResponse({ ok: true });
+    } catch (err) {
+      console.error("Snipr: extension sign-in handoff failed", err);
+      sendResponse({ ok: false, error: err.message });
+    }
+  })();
+  return true;
+});
 
 // ── Message Handlers ──────────────────────────────────────────────────────────
 

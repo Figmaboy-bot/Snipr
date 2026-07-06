@@ -7,11 +7,25 @@
     "activeTab",
     "storage",
     "scripting",
-    "unlimitedStorage"
+    "unlimitedStorage",
+    "identity"
   ],
+  "oauth2": {
+    "client_id": "YOUR_EXTENSION_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  },
   "host_permissions": [
     "<all_urls>"
   ],
+  "externally_connectable": {
+    "matches": [
+      "http://localhost:8123/*",
+      "https://snipr-gamma.vercel.app/*"
+    ]
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

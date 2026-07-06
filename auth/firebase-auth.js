@@ -5,6 +5,7 @@ import {
   browserLocalPersistence,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithCustomToken,
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
@@ -62,6 +63,15 @@ export async function signInEmailPassword(email, password) {
 export async function signUpEmailPassword(email, password) {
   if (!auth) throw new Error("Auth not initialized");
   return createUserWithEmailAndPassword(auth, email, password);
+}
+
+// Used for the extension side of the webapp sign-in handoff: the webapp mints
+// a custom token (via the mintExtensionToken Cloud Function) for whichever
+// user just signed in there, and messages it to the extension so it can
+// establish its own real session without ever seeing a password.
+export async function signInWithCustomTokenValue(token) {
+  if (!auth) throw new Error("Auth not initialized");
+  return signInWithCustomToken(auth, token);
 }
 
 export async function signInWithGoogleChrome() {
@@ -147,6 +157,7 @@ const SnprFirebaseAuth = {
   getCurrentUser,
   signInEmailPassword,
   signUpEmailPassword,
+  signInWithCustomTokenValue,
   signInWithGoogleChrome,
   signOutUser,
   subscribeAuth,
