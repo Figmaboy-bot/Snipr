@@ -1143,8 +1143,6 @@ body {
 
 .auth-btn-row .btn-ghost-sm { flex: 1; }
 
-.auth-google-btn { width: 100%; }
-
 .auth-hint {
   font-size: 11px;
   color: var(--muted);

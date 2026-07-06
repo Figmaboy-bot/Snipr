@@ -16,8 +16,7 @@ A Chrome extension to capture and organize website sections by design type and i
    - Create a [Firebase](https://console.firebase.google.com/) project and add a **Web** app.  
    - In **Authentication → Sign-in method**, enable **Email/Password** and **Google**.  
    - Copy your web app config into `firebase-config.js` (see `firebase-config.example.js`).  
-   - For **Google sign-in from the extension**, create an **OAuth 2.0 Client ID** of type **Chrome extension** in [Google Cloud Console](https://console.cloud.google.com/apis/credentials), using your extension’s ID from `chrome://extensions` → Snpr → **Details**.  
-   - Put that client ID in `manifest.json` under `oauth2.client_id` (replace `YOUR_EXTENSION_OAUTH_CLIENT_ID.apps.googleusercontent.com`).
+   - The extension itself only has **Sign in** / **Sign up** buttons, which open the web app to actually authenticate (email/password or Google) — see **Sign-in flow** below. There's no separate Google OAuth client to configure for the extension.
 
 2. **Build the auth bundle** (after `npm install` or when you change `auth/firebase-auth.js` or `firebase-config.js`):  
    ```bash
@@ -64,7 +63,7 @@ Notes:
 
 ## Usage
 
-1. Open the popup and click **Sign in** / **Sign up** — this opens the web app to authenticate (or use **Continue with Google** directly in the popup). Session persists across popup opens.
+1. Open the popup and click **Sign in** / **Sign up** — this opens the web app to authenticate (email/password or Google). Session persists across popup opens.
 2. Navigate to any website
 3. Click the DesignVault icon in your toolbar
 3. The extension auto-scans the page and highlights detected sections

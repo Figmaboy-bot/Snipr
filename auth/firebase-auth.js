@@ -8,8 +8,6 @@ import {
   signInWithCustomToken,
   signOut,
   onAuthStateChanged,
-  GoogleAuthProvider,
-  signInWithCredential,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -77,41 +75,9 @@ export async function signInWithCustomTokenValue(token) {
   return signInWithCustomToken(auth, token);
 }
 
-export async function signInWithGoogleChrome() {
-  if (!auth) throw new Error("Auth not initialized");
-  return new Promise((resolve, reject) => {
-    chrome.identity.getAuthToken({ interactive: true }, async (token) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      if (!token) {
-        reject(new Error("No Google token"));
-        return;
-      }
-      try {
-        const credential = GoogleAuthProvider.credential(null, token);
-        const result = await signInWithCredential(auth, credential);
-        resolve(result);
-      } catch (err) {
-        reject(err);
-      }
-    });
-  });
-}
-
 export async function signOutUser() {
   if (!auth) return;
   await signOut(auth);
-  try {
-    chrome.identity.getAuthToken({ interactive: false }, (token) => {
-      if (token && chrome.identity.removeCachedAuthToken) {
-        chrome.identity.removeCachedAuthToken({ token });
-      }
-    });
-  } catch (_e) {
-    /* optional */
-  }
 }
 
 export function subscribeAuth(callback) {
@@ -161,7 +127,6 @@ const SnprFirebaseAuth = {
   signInEmailPassword,
   signUpEmailPassword,
   signInWithCustomTokenValue,
-  signInWithGoogleChrome,
   signOutUser,
   subscribeAuth,
   cloudPushSaves,

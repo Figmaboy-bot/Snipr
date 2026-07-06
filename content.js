@@ -99,6 +99,17 @@
   let overlayActive = false;
   const highlightedEls = new Set();
 
+  // Manually-picked elements (via the "Pick element manually" fallback) live
+  // in a separate array so a later GET_SECTIONS rescan — which reassigns
+  // detectedSections wholesale — never clobbers them. They're considered
+  // selected the moment they're picked.
+  const manualPicks = [];
+  let manualPickCounter = 0;
+
+  function findAnySection(id) {
+    return detectedSections.find(s => s.id === id) || manualPicks.find(s => s.id === id);
+  }
+
   // Clean injected overlay artifacts from saved HTML.
   // Without this, the saved snippet would include the `dv-badge` overlay nodes.
   function getCleanOuterHTML(el) {
@@ -183,22 +194,21 @@
   }
 
   function getSelectedSections() {
-    return detectedSections
-      .filter(s => highlightedEls.has(s.id))
-      .map(s => ({
-        id: s.id,
-        label: s.label,
-        html: getCleanOuterHTML(s.el),
-        url: window.location.href,
-        title: document.title,
-        timestamp: Date.now(),
-      }));
+    const auto = detectedSections.filter(s => highlightedEls.has(s.id));
+    return [...auto, ...manualPicks].map(s => ({
+      id: s.id,
+      label: s.label,
+      html: getCleanOuterHTML(s.el),
+      url: window.location.href,
+      title: document.title,
+      timestamp: Date.now(),
+    }));
   }
 
   // ── Screenshot Capture ────────────────────────────────────────────────────────
   function captureSection(sectionId) {
     console.log("captureSection called with:", sectionId);
-    const section = detectedSections.find(s => s.id === sectionId);
+    const section = findAnySection(sectionId);
     if (!section) {
       console.error("Section not found:", sectionId, "Available:", detectedSections.map(s => s.id));
       return null;
@@ -376,7 +386,7 @@
 
         case "GET_SECTION_RECT": {
           console.log("GET_SECTION_RECT - sectionId:", message.sectionId);
-          const section = detectedSections.find(s => s.id === message.sectionId);
+          const section = findAnySection(message.sectionId);
           if (!section) {
             sendResponse({ rect: null });
             break;
@@ -392,7 +402,7 @@
         }
 
         case "GET_SECTION_ASSETS": {
-          const section = detectedSections.find(s => s.id === message.sectionId);
+          const section = findAnySection(message.sectionId);
           if (!section) {
             sendResponse({ assets: null });
             break;

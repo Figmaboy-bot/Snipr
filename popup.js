@@ -1222,28 +1222,6 @@ function showAuthError(msg) {
   el.classList.remove("hidden");
 }
 
-function friendlyAuthError(err) {
-  const code = err?.code || "";
-  const msg = err?.message || "";
-  if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found"))
-    return "Wrong email or password. No account yet? Tap Sign up.";
-  if (code.includes("email-already-in-use")) return "That email already has an account — tap Sign in.";
-  if (code.includes("weak-password")) return "Password must be at least 6 characters.";
-  if (code.includes("invalid-email")) return "That doesn't look like a valid email.";
-  if (code.includes("missing-password")) return "Enter your password.";
-  if (code.includes("too-many-requests")) return "Too many attempts — wait a minute and try again.";
-  if (code.includes("network-request-failed")) return "Network error — check your connection.";
-  if (code.includes("operation-not-allowed")) return "This sign-in method isn't enabled in Firebase yet.";
-  if (msg.toLowerCase().includes("bad client id") || msg.toLowerCase().includes("invalid oauth2 client"))
-    return "Google sign-in isn't set up yet (OAuth client ID missing in manifest.json — see README). Use Sign in / Sign up instead.";
-  return msg || "Something went wrong.";
-}
-
-function googleOAuthConfigured() {
-  const clientId = chrome.runtime.getManifest()?.oauth2?.client_id || "";
-  return clientId && !clientId.startsWith("YOUR_");
-}
-
 // The Snipr web app. Use http://localhost:8123 for local dev (and add the
 // matching origin to manifest.json's externally_connectable).
 const WEBAPP_URL = "https://snipr-gamma.vercel.app";
@@ -1264,22 +1242,6 @@ function wireAuthEvents() {
   // refresh its auth UI immediately instead of waiting for a reopen.
   chrome.runtime.onMessage.addListener(message => {
     if (message?.type === "AUTH_UPDATED") renderAuthUI();
-  });
-
-  $("btn-google")?.addEventListener("click", async () => {
-    $("auth-error").classList.add("hidden");
-    if (!googleOAuthConfigured()) {
-      return showAuthError(
-        "Google sign-in needs a one-time OAuth setup (see README → oauth2.client_id in manifest.json). Use Sign in / Sign up for now — it syncs to the same web app."
-      );
-    }
-    try {
-      await api().signInWithGoogleChrome();
-      showToast("Signed in with Google");
-    } catch (err) {
-      console.error("Snipr: google sign in failed", err);
-      showAuthError(friendlyAuthError(err));
-    }
   });
 
   $("btn-sign-out")?.addEventListener("click", async () => {
