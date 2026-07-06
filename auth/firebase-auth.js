@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import {
   getAuth,
   setPersistence,
-  browserLocalPersistence,
+  indexedDBLocalPersistence,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithCustomToken,
@@ -42,7 +42,10 @@ export function initFirebase() {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
-    setPersistence(auth, browserLocalPersistence).catch(() => {});
+    // indexedDBLocalPersistence (not browserLocalPersistence) — this module is
+    // shared by popup.html (a document) and background.js (an MV3 service
+    // worker, which has no `window`/localStorage, only IndexedDB).
+    setPersistence(auth, indexedDBLocalPersistence).catch(() => {});
   }
   return { ok: true, auth };
 }

@@ -18570,7 +18570,7 @@ This typically indicates that your device does not have a healthy Internet conne
       app = initializeApp(firebaseConfig);
       auth = getAuth(app);
       db = getFirestore(app);
-      setPersistence(auth, browserLocalPersistence).catch(() => {
+      setPersistence(auth, indexedDBLocalPersistence).catch(() => {
       });
     }
     return { ok: true, auth };

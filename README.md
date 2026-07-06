@@ -37,25 +37,22 @@ Snips saved from the extension sync to Firestore and show up in the **Snipr web 
 
 1. **Enable Firestore** — in the [Firebase console](https://console.firebase.google.com/) for your project, go to **Build → Firestore Database → Create database** (production mode is fine).
 2. **Set security rules** — paste the contents of `firestore.rules` into **Firestore → Rules** and publish. Each user can only read/write their own vault (`users/{uid}/…`).
-3. **Deploy the extension sign-in endpoint** (one-time; this is a small [Vercel](https://vercel.com) serverless function — no Firebase Blaze plan required):
+3. **Deploy to Vercel** (one-time; hosts both the web app and the extension sign-in endpoint — no Firebase Blaze plan required):
    - Get a service account key: Firebase Console → Project Settings → **Service accounts** → **Generate new private key** (downloads a JSON file — keep it secret, never commit it).
-   - Deploy this repo to Vercel (`npx vercel` from the repo root, or connect the repo in the Vercel dashboard). Vercel auto-detects `api/mint-extension-token.js` as a serverless function.
-   - In the Vercel project's **Settings → Environment Variables**, add `FIREBASE_SERVICE_ACCOUNT` with the *entire contents* of that JSON key file as the value.
-   - Note the deployed URL (e.g. `https://your-project.vercel.app`) — you'll need it below.
-   - Add that origin to `ALLOWED_ORIGINS` in `api/mint-extension-token.js` if it differs from `localhost:8123`.
-4. **Point the web app at your deployed endpoint** — update `MINT_TOKEN_URL` near the top of `webapp/src/app.js` to `https://your-project.vercel.app/api/mint-extension-token`.
-5. **Build the web app and auth bundle**:
+   - `vercel link` then `vercel deploy --prod` from the repo root (or connect the repo in the Vercel dashboard). `vercel.json` sets `outputDirectory: webapp`, so Vercel serves the web app as static output and auto-detects `api/mint-extension-token.js` as a serverless function — one deployment covers both.
+   - In the Vercel project's **Settings → Environment Variables**, add `FIREBASE_SERVICE_ACCOUNT` with the *entire contents* of that JSON key file as the value, then redeploy so it takes effect.
+   - In **Settings → Deployment Protection**, make sure "Vercel Authentication" is off — otherwise both the web app and the API are blocked behind a Vercel SSO wall.
+   - This project is currently deployed at `https://snipr-gamma.vercel.app`. If you deploy your own copy, update the URL in three places: `MINT_TOKEN_URL` in `webapp/src/app.js`, `ALLOWED_ORIGINS` in `api/mint-extension-token.js`, and `WEBAPP_URL` in `popup.js` (also add it to `externally_connectable.matches` in `manifest.json`).
+4. **Build the auth bundle after any `auth/firebase-auth.js` change, and rebuild+redeploy the web app after any `webapp/src/app.js` change**:
    ```bash
-   npm run build   # builds both auth/firebase-auth.bundle.js and webapp/app.bundle.js
+   npm run build          # builds auth/firebase-auth.bundle.js and webapp/app.bundle.js
+   vercel deploy --prod   # ships the rebuilt webapp/app.bundle.js and api/
    ```
-6. **Run the web app locally**:
+   For local iteration on the web app without redeploying every time:
    ```bash
-   npx serve webapp -l 8123       # or: python3 -m http.server 8123 --directory webapp
+   npx serve webapp -l 8123   # or: python3 -m http.server 8123 --directory webapp
    ```
-   `localhost` is authorized for Firebase Auth by default. To deploy the webapp itself (Firebase Hosting, Vercel, Netlify…):
-   - Serve the `webapp/` folder and add your domain in **Authentication → Settings → Authorized domains**.
-   - Update `WEBAPP_URL` in `popup.js` to your production URL.
-   - Add your production origin to `externally_connectable.matches` in `manifest.json` (replace `YOUR-WEBAPP-PROD-DOMAIN`) and to `ALLOWED_ORIGINS` in `api/mint-extension-token.js`.
+   (`localhost` is authorized for Firebase Auth by default — just remember `MINT_TOKEN_URL`/`WEBAPP_URL` need to point at `localhost:8123` while doing this, and back at the deployed URL when you're done.)
 
 ### Sign-in flow
 
@@ -100,6 +97,7 @@ design-vault/
 ├── firestore.rules      # Firestore security rules (paste into console)
 ├── api/
 │   └── mint-extension-token.js  # Vercel serverless function: webapp → extension sign-in handoff
+├── vercel.json          # Vercel config (outputDirectory: webapp)
 ├── firebase.json        # Firebase CLI config (firestore rules only)
 └── icons/               # Extension icons (add your own PNGs)
 ```
