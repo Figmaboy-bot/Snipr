@@ -79,6 +79,56 @@ async function loadBootstrap() {
 }
 
 // ── Screenshot Capture ────────────────────────────────────────────────────────
+
+// Sections taller than the viewport can't be captured in one shot — this caps
+// how many extra viewport-height slices we'll scroll+capture+stitch before
+// giving up, as a runaway-loop guard rather than a real UX target.
+const MAX_CAPTURE_SLICES = 6;
+
+async function captureVisibleSlice(tab, rect, dpr, viewportWidth, viewportHeight) {
+  const bgResponse = await chrome.runtime.sendMessage({
+    type: "CAPTURE_SCREENSHOT",
+    tabId: tab.id,
+    windowId: tab.windowId,
+    rect,
+    dpr,
+    viewportWidth,
+    viewportHeight,
+  });
+  return bgResponse?.screenshot || null;
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function stitchSlices(slices, width) {
+  if (slices.length === 1) return slices[0].dataUrl;
+
+  const totalHeight = slices.reduce((sum, s) => sum + s.height, 0);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width));
+  canvas.height = Math.max(1, Math.round(totalHeight));
+  const ctx = canvas.getContext("2d");
+
+  let y = 0;
+  for (const slice of slices) {
+    if (slice.dataUrl) {
+      try {
+        const img = await loadImage(slice.dataUrl);
+        ctx.drawImage(img, 0, y);
+      } catch (_e) { /* skip a failed slice, keep the rest */ }
+    }
+    y += slice.height;
+  }
+  return canvas.toDataURL("image/png");
+}
+
 async function captureSectionScreenshot(sectionId) {
   try {
     const tab = await getActiveTab();
@@ -98,7 +148,7 @@ async function captureSectionScreenshot(sectionId) {
         target: { tabId: tab.id },
         files: ["styles/content.css"],
       }).catch(() => {});
-      
+
       // Re-scan to populate sections in content script
       console.log("Re-scanning page to populate sections");
       const scanRes = await chrome.tabs.sendMessage(tab.id, { type: "GET_SECTIONS" });
@@ -107,12 +157,12 @@ async function captureSectionScreenshot(sectionId) {
 
     // Now get the rect
     console.log("Requesting section rect...");
-    const response = await chrome.tabs.sendMessage(tab.id, { 
-      type: "GET_SECTION_RECT", 
-      sectionId 
+    const response = await chrome.tabs.sendMessage(tab.id, {
+      type: "GET_SECTION_RECT",
+      sectionId
     });
     console.log("GET_SECTION_RECT response:", response);
-    
+
     if (!response?.rect) {
       console.error("No rect found in response");
       return null;
@@ -121,18 +171,42 @@ async function captureSectionScreenshot(sectionId) {
     const { rect, dpr = 1, viewportWidth, viewportHeight } = response.rect;
     console.log("Rect data:", { rect, dpr, viewportWidth, viewportHeight });
 
-    const bgResponse = await chrome.runtime.sendMessage({
-      type: "CAPTURE_SCREENSHOT",
-      tabId: tab.id,
-      windowId: tab.windowId,
-      rect,
-      dpr,
-      viewportWidth,
-      viewportHeight,
-    });
+    const firstY = Math.max(0, rect.y);
+    const firstHeight = Math.min(rect.height, viewportHeight - firstY);
+    const firstSlice = await captureVisibleSlice(
+      tab, { x: rect.x, y: firstY, width: rect.width, height: firstHeight }, dpr, viewportWidth, viewportHeight
+    );
 
-    console.log("Background screenshot response:", bgResponse);
-    return bgResponse?.screenshot || null;
+    let remaining = rect.height - firstHeight;
+    if (remaining <= 0) {
+      // Fits in one shot — today's behavior, unchanged.
+      return firstSlice;
+    }
+
+    // Tall section: scroll down exactly what's already been captured each
+    // time, so slices are contiguous with no gap or overlap, then stitch.
+    const slices = [{ dataUrl: firstSlice, height: firstHeight }];
+    let scrolledBy = 0;
+
+    while (remaining > 0 && slices.length < MAX_CAPTURE_SLICES) {
+      const last = slices[slices.length - 1];
+      await chrome.tabs.sendMessage(tab.id, { type: "SCROLL_BY", amount: last.height }).catch(() => {});
+      scrolledBy += last.height;
+
+      const sliceHeight = Math.min(remaining, viewportHeight);
+      const dataUrl = await captureVisibleSlice(
+        tab, { x: rect.x, y: 0, width: rect.width, height: sliceHeight }, dpr, viewportWidth, viewportHeight
+      );
+      if (!dataUrl) break;
+      slices.push({ dataUrl, height: sliceHeight });
+      remaining -= sliceHeight;
+    }
+
+    if (scrolledBy > 0) {
+      await chrome.tabs.sendMessage(tab.id, { type: "SCROLL_BY", amount: -scrolledBy }).catch(() => {});
+    }
+
+    return await stitchSlices(slices, rect.width);
   } catch (err) {
     console.error("DesignVault: screenshot capture failed", err);
     return null;
@@ -1303,6 +1377,20 @@ async function exportVault() {
 function wireEvents() {
   $("btn-scan").addEventListener("click", scanPage);
 
+  $("btn-manual-pick")?.addEventListener("click", async () => {
+    const tab = await getActiveTab();
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: "PING" });
+    } catch (_e) {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+      await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ["styles/content.css"] }).catch(() => {});
+    }
+    // The picker runs entirely on-page — clicking the underlying page would
+    // close this popup anyway, so close it now and pick back up on reopen.
+    await chrome.tabs.sendMessage(tab.id, { type: "START_MANUAL_PICKER" });
+    window.close();
+  });
+
   $("btn-clear-selection").addEventListener("click", () => {
     state.selectedSections = [];
     state.selectedCategories.clear();
@@ -1378,6 +1466,25 @@ function wireEvents() {
 
 }
 
+// If "Pick element manually" was used, the popup closed itself while the user
+// picked an element on the page. Reopening the popup is the only way to
+// continue that flow — pull the resulting selection back in here.
+async function rehydratePendingManualPick(tab) {
+  const { pendingManualPick } = await chrome.storage.local.get("pendingManualPick");
+  if (!pendingManualPick) return;
+  await chrome.storage.local.remove("pendingManualPick");
+  if (pendingManualPick.tabId !== tab.id) return;
+
+  const res = await chrome.tabs.sendMessage(tab.id, { type: "GET_SELECTED_SECTIONS" });
+  const selected = res?.selected || [];
+  if (!selected.length) return;
+
+  state.selectedSections = selected;
+  syncListSelection();
+  updateSavePanel();
+  showToast("Custom element added — ready to snip!");
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async () => {
   wireEvents();
@@ -1389,5 +1496,6 @@ function wireEvents() {
   if (tab?.url && !tab.url.startsWith("chrome://")) {
     $("page-title").textContent = tab.title || tab.url;
     await scanPage().catch(() => {});
+    await rehydratePendingManualPick(tab).catch(() => {});
   }
 })();

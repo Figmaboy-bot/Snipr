@@ -139,6 +139,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
       }
 
+      // ── Manual element picker ────────────────────────────────────────────────
+      // Popups close the instant the user clicks the underlying page, so the
+      // picker runs entirely on-page and closes the popup itself. It messages
+      // back here (content scripts don't know their own tab id) so the popup
+      // can find the pending pick again next time it opens.
+
+      case "SET_PENDING_MANUAL_PICK": {
+        await chrome.storage.local.set({
+          pendingManualPick: { tabId: sender.tab?.id },
+        });
+        sendResponse({ ok: true });
+        break;
+      }
+
       // ── Saves ──────────────────────────────────────────────────────────────
 
       case "SAVE_SECTIONS": {

@@ -47,6 +47,37 @@
   background: #4f46e5;
 }
 
+/* ── Manual element picker ─────────────────────────────────────────────────── */
+
+.dv-manual-hover {
+  outline: 2.5px solid #f59e0b !important;
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 2000px rgba(245, 158, 11, 0.08) !important;
+  cursor: pointer !important;
+}
+
+.dv-picker-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  background: #1f2937;
+  color: #fff;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.dv-picker-banner-done {
+  background: #16a34a;
+}
+
 /* Snpr popup detail/code view styles */
 .snpr-detail-view {
   display: flex;

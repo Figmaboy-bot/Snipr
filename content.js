@@ -338,6 +338,111 @@
     };
   }
 
+  // ── Manual element picker ──────────────────────────────────────────────────
+  // Fallback for pages where auto-detection finds nothing useful (e.g. hashed
+  // Tailwind/CSS-in-JS class names with no semantic hint). Lets the user
+  // hover-and-click any element on the page directly, widening/narrowing to
+  // parent/child with the arrow keys first if the exact hovered node isn't
+  // quite right.
+
+  let manualPickerActive = false;
+  let manualHoverEl = null;
+  let manualDrillStack = [];
+  let pickerBanner = null;
+
+  function createPickerBanner() {
+    const banner = document.createElement("div");
+    banner.className = "dv-picker-banner";
+    banner.textContent = "Click any element to snip it  •  Esc to cancel  •  ↑ widen / ↓ narrow";
+    document.documentElement.appendChild(banner);
+    return banner;
+  }
+
+  function setManualHover(el) {
+    if (el === manualHoverEl) return;
+    if (manualHoverEl) manualHoverEl.classList.remove("dv-manual-hover");
+    manualHoverEl = el;
+    if (manualHoverEl) manualHoverEl.classList.add("dv-manual-hover");
+  }
+
+  function onManualMouseMove(e) {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if (!el || el.closest(".dv-badge, .dv-picker-banner")) return;
+    manualDrillStack = [];
+    setManualHover(el);
+  }
+
+  function onManualKeydown(e) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      stopManualPicker();
+      return;
+    }
+    if (!manualHoverEl) return;
+    if (e.key === "ArrowUp" && manualHoverEl.parentElement) {
+      e.preventDefault();
+      manualDrillStack.push(manualHoverEl);
+      setManualHover(manualHoverEl.parentElement);
+    } else if (e.key === "ArrowDown" && manualDrillStack.length) {
+      e.preventDefault();
+      setManualHover(manualDrillStack.pop());
+    }
+  }
+
+  function onManualClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!manualHoverEl) return;
+
+    const el = manualHoverEl;
+    const id = `dv-manual-${manualPickCounter++}`;
+    const label = "Custom";
+
+    el.setAttribute("data-dv-id", id);
+    el.classList.remove("dv-manual-hover");
+    el.classList.add("dv-highlightable", "dv-selected");
+    const badge = createBadge(label);
+    badge.setAttribute("data-dv-badge", id);
+    el.appendChild(badge);
+    el.addEventListener("mouseenter", onHover);
+    el.addEventListener("mouseleave", onUnhover);
+    el.addEventListener("click", onSectionClick, true);
+
+    manualPicks.push({ id, label, el });
+    stopManualPicker();
+
+    chrome.runtime.sendMessage({ type: "SECTION_SELECTION_CHANGED", selected: getSelectedSections() }).catch(() => {});
+    chrome.runtime.sendMessage({ type: "SET_PENDING_MANUAL_PICK" }).catch(() => {});
+    showPickerConfirmation();
+  }
+
+  function showPickerConfirmation() {
+    const banner = createPickerBanner();
+    banner.textContent = "✓ Captured — reopen Snipr to continue";
+    banner.classList.add("dv-picker-banner-done");
+    setTimeout(() => banner.remove(), 2200);
+  }
+
+  function startManualPicker() {
+    if (manualPickerActive) return;
+    manualPickerActive = true;
+    manualDrillStack = [];
+    pickerBanner = createPickerBanner();
+    document.addEventListener("mousemove", onManualMouseMove, true);
+    document.addEventListener("click", onManualClick, true);
+    document.addEventListener("keydown", onManualKeydown, true);
+  }
+
+  function stopManualPicker() {
+    manualPickerActive = false;
+    document.removeEventListener("mousemove", onManualMouseMove, true);
+    document.removeEventListener("click", onManualClick, true);
+    document.removeEventListener("keydown", onManualKeydown, true);
+    setManualHover(null);
+    manualDrillStack = [];
+    if (pickerBanner) { pickerBanner.remove(); pickerBanner = null; }
+  }
+
   // ── Message Bridge ─────────────────────────────────────────────────────────
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -409,6 +514,20 @@
           }
           const assets = extractAssets(section.el);
           sendResponse({ assets });
+          break;
+        }
+
+        case "SCROLL_BY": {
+          window.scrollBy(0, message.amount || 0);
+          requestAnimationFrame(() => {
+            sendResponse({ ok: true, scrollY: window.scrollY });
+          });
+          break;
+        }
+
+        case "START_MANUAL_PICKER": {
+          startManualPicker();
+          sendResponse({ ok: true });
           break;
         }
 
