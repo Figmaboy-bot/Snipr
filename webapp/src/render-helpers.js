@@ -77,6 +77,10 @@ export function buildCodeOptions(sectionHtml) {
 export function sanitizeSvg(svgHtml) {
   try {
     const docp = new DOMParser().parseFromString(svgHtml, "image/svg+xml");
+    // DOMParser never throws on malformed XML — it returns a document whose
+    // root is a <parsererror> instead, which would otherwise get serialized
+    // and rendered as literal error text in the SVG asset panel.
+    if (docp.querySelector("parsererror")) return "";
     docp.querySelectorAll("script").forEach(s => s.remove());
     docp.querySelectorAll("*").forEach(el => {
       [...el.attributes].forEach(attr => {

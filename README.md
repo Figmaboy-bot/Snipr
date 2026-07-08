@@ -78,6 +78,16 @@ Click **🔗 My Shares** in the header to see every link you've published and **
 6. Pick a **folder**, add **categories**, optionally write a **note**
 7. Hit **Save to Vault**
 
+## Testing
+
+```bash
+npm test
+```
+
+Runs the [Vitest](https://vitest.dev) suite (`webapp/src/render-helpers.test.js`, `shared/merge.test.js`) — pure-function tests for card/detail rendering (HTML escaping, code extraction, SVG sanitizing) and for the import/share merge-dedup logic. These run in CI on every push/PR (`.github/workflows/test.yml`), which also runs `npm run build` to catch bundling regressions.
+
+This covers the logic that's cheap to test in isolation — DOM rendering and data merging. It does **not** cover Chrome extension APIs, Firestore reads/writes, or Firebase Auth, which would need heavier mocking or the Firestore emulator to test meaningfully; those are currently only verified by hand against a real deployment, not in CI.
+
 ## Project Structure
 
 ```
@@ -87,6 +97,9 @@ design-vault/
 ├── auth/
 │   ├── firebase-auth.js # Auth source (Firebase SDK)
 │   └── firebase-auth.bundle.js  # Built by npm run build:auth
+├── shared/
+│   ├── merge.js          # Pure import/share merge-dedup + batch-chunking logic — tested directly, shared by both sides below
+│   └── merge.bundle.js   # Built by npm run build:merge (self.SniprMerge, loaded via importScripts in background.js)
 ├── content.js           # Injected into pages — detects & highlights sections
 ├── background.js        # Service worker — storage, messaging
 ├── popup.html           # Extension popup UI
@@ -99,9 +112,10 @@ design-vault/
 │   ├── share.html       # Public, read-only view of a shared folder
 │   ├── styles.css
 │   ├── src/
-│   │   ├── app.js             # Library source (bundled by npm run build:webapp)
-│   │   ├── share.js           # Share page source
-│   │   └── render-helpers.js  # Card/detail rendering shared by app.js and share.js
+│   │   ├── app.js                  # Library source (bundled by npm run build:webapp)
+│   │   ├── share.js                # Share page source
+│   │   ├── render-helpers.js       # Card/detail rendering shared by app.js and share.js
+│   │   └── render-helpers.test.js  # Vitest suite for render-helpers.js
 │   ├── app.bundle.js    # Built bundle loaded by index.html
 │   └── share.bundle.js  # Built bundle loaded by share.html
 ├── firestore.rules      # Firestore security rules (paste into console)
