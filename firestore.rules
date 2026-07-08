@@ -5,5 +5,22 @@ service cloud.firestore {
     match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+
+    // Public share links: a signed-in user can publish a snapshot of a
+    // folder (ownerUid stamped on every doc so rules never need a cross-doc
+    // get()), and anyone with the link can read it — no auth required.
+    // Only the owner can update/delete; there's no need to ever update a
+    // published share, but delete lets someone revoke a link they made.
+    match /shares/{shareId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+
+      match /saves/{saveId} {
+        allow read: if true;
+        allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+        allow update, delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+      }
+    }
   }
 }

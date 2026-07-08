@@ -35,17 +35,17 @@ A Chrome extension to capture and organize website sections by design type and i
 Snips saved from the extension sync to Firestore and show up in the **Snipr web app** (`webapp/`).
 
 1. **Enable Firestore** — in the [Firebase console](https://console.firebase.google.com/) for your project, go to **Build → Firestore Database → Create database** (production mode is fine).
-2. **Set security rules** — paste the contents of `firestore.rules` into **Firestore → Rules** and publish. Each user can only read/write their own vault (`users/{uid}/…`).
+2. **Set security rules** — paste the contents of `firestore.rules` into **Firestore → Rules** and publish. Each user can only read/write their own vault (`users/{uid}/…`); a separate `shares/{id}` collection backs the "Share collection with a link" feature and is publicly readable by design (see below) — re-paste and republish `firestore.rules` whenever it changes, since the console doesn't track the file.
 3. **Deploy to Vercel** (one-time; hosts both the web app and the extension sign-in endpoint — no Firebase Blaze plan required):
    - Get a service account key: Firebase Console → Project Settings → **Service accounts** → **Generate new private key** (downloads a JSON file — keep it secret, never commit it).
    - `vercel link` then `vercel deploy --prod` from the repo root (or connect the repo in the Vercel dashboard). `vercel.json` sets `outputDirectory: webapp`, so Vercel serves the web app as static output and auto-detects `api/mint-extension-token.js` as a serverless function — one deployment covers both.
    - In the Vercel project's **Settings → Environment Variables**, add `FIREBASE_SERVICE_ACCOUNT` with the *entire contents* of that JSON key file as the value, then redeploy so it takes effect.
    - In **Settings → Deployment Protection**, make sure "Vercel Authentication" is off — otherwise both the web app and the API are blocked behind a Vercel SSO wall.
    - This project is currently deployed at `https://snipr-gamma.vercel.app`. If you deploy your own copy, update the URL in three places: `MINT_TOKEN_URL` in `webapp/src/app.js`, `ALLOWED_ORIGINS` in `api/mint-extension-token.js`, and `WEBAPP_URL` in `popup.js` (also add it to `externally_connectable.matches` in `manifest.json`).
-4. **Build the auth bundle after any `auth/firebase-auth.js` change, and rebuild+redeploy the web app after any `webapp/src/app.js` change**:
+4. **Build the auth bundle after any `auth/firebase-auth.js` change, and rebuild+redeploy the web app after any `webapp/src/*.js` change**:
    ```bash
-   npm run build          # builds auth/firebase-auth.bundle.js and webapp/app.bundle.js
-   vercel deploy --prod   # ships the rebuilt webapp/app.bundle.js and api/
+   npm run build          # builds auth/firebase-auth.bundle.js, webapp/app.bundle.js and webapp/share.bundle.js
+   vercel deploy --prod   # ships the rebuilt bundles and api/
    ```
    For local iteration on the web app without redeploying every time:
    ```bash
@@ -60,6 +60,10 @@ Clicking **Sign in** / **Sign up** in the extension popup opens the web app in a
 Notes:
 - Screenshots are re-encoded as bounded JPEGs and very large HTML is truncated before upload (Firestore documents are capped at 1 MB). The full-quality copy always stays in the extension's local storage.
 - Deleting a snip in either place removes it from the cloud; local copies in the extension are only removed when deleted from the extension.
+
+### Sharing a folder
+
+In the web app, select a folder tab (not "All") and click **🔗 Share** to publish a public, read-only snapshot of everything currently in that folder — the link (`/share.html?id=…`) works for anyone, no sign-in required. It's a snapshot: snips added to the folder afterward won't show up on that link unless you share again, which publishes a new, independent link.
 
 ## Usage
 
@@ -90,9 +94,14 @@ design-vault/
 │   └── popup.css        # Popup UI styles
 ├── webapp/              # Snipr web app (browse your synced library)
 │   ├── index.html
+│   ├── share.html       # Public, read-only view of a shared folder
 │   ├── styles.css
-│   ├── src/app.js       # Source (bundled by npm run build:webapp)
-│   └── app.bundle.js    # Built bundle loaded by index.html
+│   ├── src/
+│   │   ├── app.js             # Library source (bundled by npm run build:webapp)
+│   │   ├── share.js           # Share page source
+│   │   └── render-helpers.js  # Card/detail rendering shared by app.js and share.js
+│   ├── app.bundle.js    # Built bundle loaded by index.html
+│   └── share.bundle.js  # Built bundle loaded by share.html
 ├── firestore.rules      # Firestore security rules (paste into console)
 ├── api/
 │   └── mint-extension-token.js  # Vercel serverless function: webapp → extension sign-in handoff
@@ -113,9 +122,9 @@ You can use any design tool or generate them online. A simple hexagon works grea
 ## Next Steps / Roadmap
 
 - [ ] Screenshot capture of selected sections
-- [ ] HTML preview in library cards
-- [ ] Search across saved sections
-- [ ] Import from JSON export
+- [x] HTML preview in library cards
+- [x] Search across saved sections
+- [x] Import from JSON export
 - [x] Sync to cloud (Firebase)
 - [x] Web app to browse your library
-- [ ] Share collections with a link
+- [x] Share collections with a link

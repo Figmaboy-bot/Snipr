@@ -19,8 +19,18 @@ import {
   orderBy,
   onSnapshot,
   deleteDoc,
+  writeBatch,
+  serverTimestamp,
 } from "firebase/firestore";
 import { firebaseConfig } from "../../firebase-config.js";
+import {
+  hostnameOf,
+  escapeHtml,
+  cardThumbHtml,
+  buildCodeOptions,
+  renderDetailAssets,
+  wireAssetClicks,
+} from "./render-helpers.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -70,6 +80,7 @@ const state = {
   categories: [],
   folderFilter: null,
   categoryFilter: "",
+  searchQuery: "",
   detailSave: null,
   loaded: false,
 };
@@ -190,6 +201,10 @@ function teardownLibrary() {
   state.categories = [];
   state.folderFilter = null;
   state.categoryFilter = "";
+  state.searchQuery = "";
+  $("search-input").value = "";
+  $("btn-clear-search").classList.add("hidden");
+  $("btn-share-folder").classList.add("hidden");
   closeDetail();
 }
 
@@ -211,6 +226,8 @@ function renderFolderTabs() {
     tab.addEventListener("click", () => { state.folderFilter = f.id; renderFolderTabs(); renderLibrary(); });
     el.appendChild(tab);
   });
+
+  $("btn-share-folder").classList.toggle("hidden", !state.folderFilter);
 }
 
 function renderCategoryFilter() {
@@ -231,21 +248,98 @@ $("category-filter").addEventListener("change", e => {
   renderLibrary();
 });
 
+// ── Sharing ───────────────────────────────────────────────────────────────────
+// Copies the currently-selected folder into a public shares/{id} doc (+ a
+// shares/{id}/saves subcollection) so anyone with the link can view a
+// read-only snapshot without signing in. Re-sharing later creates a new,
+// independent snapshot — it does not update a previous link.
+async function shareFolder() {
+  if (!state.folderFilter || !state.user) return;
+  const folder = state.folders.find(f => f.id === state.folderFilter);
+  const saves = state.saves.filter(s => s.folderId === state.folderFilter);
+  if (!saves.length) return showToast("This folder is empty — nothing to share", "error");
+
+  const btn = $("btn-share-folder");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Sharing…";
+
+  try {
+    const ownerUid = state.user.uid;
+    const shareRef = doc(collection(db, "shares"));
+
+    const metaBatch = writeBatch(db);
+    metaBatch.set(shareRef, {
+      ownerUid,
+      folderId: folder?.id || state.folderFilter,
+      folderName: folder?.name || "Snips",
+      folderIcon: folder?.icon || "📁",
+      count: saves.length,
+      createdAt: serverTimestamp(),
+    });
+    await metaBatch.commit();
+
+    // Chunk into batches of 400 to stay under Firestore's 500-write limit.
+    for (let i = 0; i < saves.length; i += 400) {
+      const batch = writeBatch(db);
+      for (const save of saves.slice(i, i + 400)) {
+        batch.set(doc(db, "shares", shareRef.id, "saves", save.id), { ...save, ownerUid });
+      }
+      await batch.commit();
+    }
+
+    const link = `${location.origin}/share.html?id=${shareRef.id}`;
+    await navigator.clipboard.writeText(link);
+    showToast(`🔗 Link copied — shares ${saves.length} snip${saves.length !== 1 ? "s" : ""} from ${folder?.name || "this folder"}`);
+  } catch (err) {
+    console.error("share failed", err);
+    showToast("Couldn't create share link", "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+$("btn-share-folder").addEventListener("click", shareFolder);
+
+let searchDebounce = null;
+$("search-input").addEventListener("input", e => {
+  const value = e.target.value;
+  $("btn-clear-search").classList.toggle("hidden", !value);
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    state.searchQuery = value.trim().toLowerCase();
+    renderLibrary();
+  }, 150);
+});
+
+$("btn-clear-search").addEventListener("click", () => {
+  $("search-input").value = "";
+  $("btn-clear-search").classList.add("hidden");
+  state.searchQuery = "";
+  renderLibrary();
+  $("search-input").focus();
+});
+
 // ── Library grid ──────────────────────────────────────────────────────────────
+function matchesSearch(save, q) {
+  if (!q) return true;
+  const haystack = [
+    save.label,
+    save.pageTitle,
+    save.url,
+    save.note,
+    ...(save.categories || []),
+  ].filter(Boolean).join(" ").toLowerCase();
+  return haystack.includes(q);
+}
+
 function filteredSaves() {
   let saves = state.saves;
   if (state.folderFilter) saves = saves.filter(s => s.folderId === state.folderFilter);
   if (state.categoryFilter) saves = saves.filter(s => s.categories?.includes(state.categoryFilter));
+  if (state.searchQuery) saves = saves.filter(s => matchesSearch(s, state.searchQuery));
   return saves;
-}
-
-function hostnameOf(url) {
-  try { return new URL(url).hostname; } catch (_) { return url || ""; }
-}
-
-function escapeHtml(text) {
-  const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" };
-  return String(text || "").replace(/[&<>"']/g, m => map[m]);
 }
 
 function renderLibrary() {
@@ -256,18 +350,20 @@ function renderLibrary() {
 
   const saves = filteredSaves();
   empty.classList.toggle("hidden", saves.length > 0);
+  if (saves.length === 0) {
+    const filtersActive = state.folderFilter || state.categoryFilter || state.searchQuery;
+    $("library-empty-text").innerHTML = (filtersActive && state.saves.length > 0)
+      ? "No snips match your search or filters."
+      : "Nothing here yet.<br/>Save sections with the Snipr extension — signed in with the same account — and they'll appear here.";
+  }
 
   saves.forEach(save => {
     const folder = state.folders.find(f => f.id === save.folderId);
     const card = document.createElement("div");
     card.className = "save-card";
 
-    const thumbHtml = save.screenshot
-      ? `<div class="save-card-thumb"><img src="${save.screenshot}" alt="${escapeHtml(save.label)}" loading="lazy" /></div>`
-      : `<div class="save-card-thumb save-card-thumb--empty"><span>📷</span></div>`;
-
     card.innerHTML = `
-      ${thumbHtml}
+      ${cardThumbHtml(save)}
       <div class="save-card-body">
         <div class="save-card-header">
           <span class="save-card-title">${folder ? folder.icon + " " : ""}${escapeHtml(save.label)}</span>
@@ -311,38 +407,6 @@ async function deleteSave(saveId) {
 }
 
 // ── Detail modal ──────────────────────────────────────────────────────────────
-function extractCodeParts(sectionHtml) {
-  const parts = { html: sectionHtml || "", css: "", js: "", externals: { css: [], js: [] } };
-  if (!sectionHtml) return parts;
-  try {
-    const docp = new DOMParser().parseFromString(sectionHtml, "text/html");
-
-    const cssStyles = Array.from(docp.querySelectorAll("style"));
-    parts.css = cssStyles.map(s => (s.textContent || "").trim()).filter(Boolean).join("\n\n");
-
-    const scriptEls = Array.from(docp.querySelectorAll("script"));
-    const jsChunks = [];
-    scriptEls.forEach(s => {
-      const src = s.getAttribute("src");
-      if (src) { parts.externals.js.push(src); jsChunks.push(`// Script src: ${src}`); }
-      const inline = (s.textContent || "").trim();
-      if (inline) jsChunks.push(inline);
-    });
-    parts.js = jsChunks.join("\n\n").trim();
-
-    Array.from(docp.querySelectorAll('link[rel="stylesheet"]')).forEach(l => {
-      const href = l.getAttribute("href");
-      if (href) parts.externals.css.push(href);
-    });
-
-    cssStyles.forEach(s => s.remove());
-    scriptEls.forEach(s => s.remove());
-    const root = docp.body.firstElementChild;
-    parts.html = (root ? root.outerHTML : docp.body.innerHTML).trim();
-  } catch (_e) { /* best effort */ }
-  return parts;
-}
-
 let currentCodeOptions = [];
 
 function openDetail(save) {
@@ -363,14 +427,7 @@ function openDetail(save) {
   }
 
   // Code tab
-  const parts = extractCodeParts(save.html);
-  currentCodeOptions = [
-    { key: "html", label: "HTML", value: parts.html || "/* (none found) */" },
-    { key: "css", label: "CSS", value: parts.css || "/* (none found) */" },
-    { key: "js", label: "JavaScript", value: parts.js || "/* (none found) */" },
-  ];
-  if (parts.externals.css.length) currentCodeOptions.push({ key: "css-urls", label: "External CSS URLs", value: parts.externals.css.join("\n") });
-  if (parts.externals.js.length) currentCodeOptions.push({ key: "js-urls", label: "External JS URLs", value: parts.externals.js.join("\n") });
+  currentCodeOptions = buildCodeOptions(save.html);
 
   const sel = $("code-type-select");
   sel.innerHTML = currentCodeOptions.map((o, i) => `<option value="${o.key}" ${i === 0 ? "selected" : ""}>${o.label}</option>`).join("");
@@ -401,7 +458,7 @@ function openDetail(save) {
   }
 
   $("detail-assets").innerHTML = renderDetailAssets(save.assets);
-  wireAssetClicks($("detail-assets"));
+  wireAssetClicks($("detail-assets"), showToast);
 
   switchDetailTab("image");
   $("detail-modal").classList.remove("hidden");
@@ -460,118 +517,3 @@ $("btn-delete-detail").addEventListener("click", async () => {
   closeDetail();
 });
 
-// ── Assets (colors / fonts / images / svgs) ───────────────────────────────────
-function sanitizeSvg(svgHtml) {
-  try {
-    const docp = new DOMParser().parseFromString(svgHtml, "image/svg+xml");
-    docp.querySelectorAll("script").forEach(s => s.remove());
-    docp.querySelectorAll("*").forEach(el => {
-      [...el.attributes].forEach(attr => {
-        if (attr.name.startsWith("on")) el.removeAttribute(attr.name);
-      });
-    });
-    return new XMLSerializer().serializeToString(docp.documentElement);
-  } catch (_) {
-    return "";
-  }
-}
-
-function safeImageUrl(url) {
-  try {
-    const u = new URL(url);
-    return (u.protocol === "https:" || u.protocol === "http:") ? url : "";
-  } catch (_) {
-    return "";
-  }
-}
-
-function renderDetailAssets(assets) {
-  if (!assets) return "";
-  const { fonts = [], colors = [], images = [], svgs = [] } = assets;
-  if (!fonts.length && !colors.length && !images.length && !svgs.length) return "";
-
-  let html = '<div class="detail-assets-divider"></div>';
-
-  if (colors.length) {
-    html += `
-      <div class="asset-section">
-        <div class="asset-section-title">Colors <span class="asset-hint">click to copy</span></div>
-        <div class="asset-colors">
-          ${colors.map(c => `
-            <div class="asset-color-swatch" data-color="${escapeHtml(c)}" style="background:${escapeHtml(c)}">
-              <span class="asset-color-label">${escapeHtml(c)}</span>
-            </div>
-          `).join("")}
-        </div>
-      </div>`;
-  }
-
-  if (fonts.length) {
-    html += `
-      <div class="asset-section">
-        <div class="asset-section-title">Fonts</div>
-        <div class="asset-fonts">
-          ${fonts.map(f => `<div class="asset-font-row"><span style="font-family:'${escapeHtml(f)}',sans-serif">${escapeHtml(f)}</span></div>`).join("")}
-        </div>
-      </div>`;
-  }
-
-  if (images.length) {
-    const thumbs = images.map(safeImageUrl).filter(Boolean)
-      .map(src => `<div class="asset-image-thumb" data-img-url="${escapeHtml(src)}" title="Click to copy URL"><img src="${escapeHtml(src)}" alt="" loading="lazy" /></div>`)
-      .join("");
-    if (thumbs) {
-      html += `
-        <div class="asset-section">
-          <div class="asset-section-title">Images <span class="asset-hint">click to copy URL</span></div>
-          <div class="asset-images">${thumbs}</div>
-        </div>`;
-    }
-  }
-
-  if (svgs.length) {
-    const thumbs = svgs.map(sanitizeSvg).filter(Boolean)
-      .map(s => `<div class="asset-svg-thumb" title="Click to copy SVG">${s}</div>`)
-      .join("");
-    if (thumbs) {
-      html += `
-        <div class="asset-section">
-          <div class="asset-section-title">SVGs <span class="asset-hint">click to copy</span></div>
-          <div class="asset-svgs">${thumbs}</div>
-        </div>`;
-    }
-  }
-
-  return html;
-}
-
-function wireAssetClicks(container) {
-  container.querySelectorAll(".asset-color-swatch[data-color]").forEach(swatch => {
-    swatch.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(swatch.dataset.color);
-        showToast(`Copied ${swatch.dataset.color}`);
-      } catch (_) { showToast("Failed to copy color", "error"); }
-    });
-  });
-
-  container.querySelectorAll(".asset-image-thumb[data-img-url]").forEach(thumb => {
-    thumb.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(thumb.dataset.imgUrl);
-        showToast("Image URL copied");
-      } catch (_) { showToast("Failed to copy", "error"); }
-    });
-  });
-
-  container.querySelectorAll(".asset-svg-thumb").forEach(thumb => {
-    thumb.addEventListener("click", async () => {
-      const svgEl = thumb.querySelector("svg");
-      if (!svgEl) return showToast("No SVG markup found", "error");
-      try {
-        await navigator.clipboard.writeText(svgEl.outerHTML);
-        showToast("SVG copied");
-      } catch (_) { showToast("Failed to copy SVG", "error"); }
-    });
-  });
-}

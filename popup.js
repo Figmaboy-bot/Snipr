@@ -1373,6 +1373,37 @@ async function exportVault() {
   URL.revokeObjectURL(url);
 }
 
+// ── Import ────────────────────────────────────────────────────────────────────
+async function importVaultFromFile(file) {
+  let parsed;
+  try {
+    parsed = JSON.parse(await file.text());
+  } catch (_e) {
+    showToast("Not a valid JSON file", "error");
+    return;
+  }
+
+  if (!parsed || !Array.isArray(parsed.saves)) {
+    showToast("Doesn't look like a Snipr export", "error");
+    return;
+  }
+
+  const res = await chrome.runtime.sendMessage({ type: "IMPORT_ALL", data: parsed });
+  if (!res?.ok) {
+    showToast("Import failed", "error");
+    return;
+  }
+
+  await loadBootstrap();
+  await loadLibrary();
+
+  if (res.addedSaves?.length) cloudPushSavesSafe(res.addedSaves).catch(() => {});
+
+  const parts = [`Imported ${res.importedSaves} snip${res.importedSaves !== 1 ? "s" : ""}`];
+  if (res.skippedSaves) parts.push(`${res.skippedSaves} already in your library`);
+  showToast(`✂ ${parts.join(" — ")}`);
+}
+
 // ── Event Wiring ──────────────────────────────────────────────────────────────
 function wireEvents() {
   $("btn-scan").addEventListener("click", scanPage);
@@ -1415,6 +1446,13 @@ function wireEvents() {
   });
 
   $("btn-export").addEventListener("click", exportVault);
+
+  $("btn-import").addEventListener("click", () => $("import-file-input").click());
+  $("import-file-input").addEventListener("change", async e => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (file) await importVaultFromFile(file);
+  });
 
   $("category-filter").addEventListener("change", e => {
     state.libraryCategoryFilter = e.target.value;

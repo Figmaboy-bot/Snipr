@@ -48,17 +48,27 @@
 
     <div class="app-body">
       <div class="library-toolbar">
-        <div id="folder-tabs" class="folder-tabs"></div>
-        <select id="category-filter" class="select-input">
-          <option value="">All categories</option>
-        </select>
+        <div class="folder-tabs-row">
+          <div id="folder-tabs" class="folder-tabs"></div>
+          <button id="btn-share-folder" class="btn-ghost-sm share-folder-btn hidden" title="Copy a public link to this folder">🔗 Share</button>
+        </div>
+        <div class="toolbar-right">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input id="search-input" type="text" class="search-input" placeholder="Search snips…" />
+            <button id="btn-clear-search" class="search-clear hidden" title="Clear search">✕</button>
+          </div>
+          <select id="category-filter" class="select-input">
+            <option value="">All categories</option>
+          </select>
+        </div>
       </div>
 
       <div id="library-grid" class="library-grid"></div>
 
       <div id="library-empty" class="empty-state hidden">
         <div class="empty-icon">✂</div>
-        <p>Nothing here yet.<br/>Save sections with the Snipr extension — signed in with the same account — and they'll appear here.</p>
+        <p id="library-empty-text">Nothing here yet.<br/>Save sections with the Snipr extension — signed in with the same account — and they'll appear here.</p>
       </div>
 
       <div id="library-loading" class="empty-state">

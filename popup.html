@@ -70,7 +70,11 @@
       <div id="view-library" class="view">
         <div class="view-inner-header">
           <h2 class="view-title">Library</h2>
-          <button id="btn-export" class="btn-ghost-sm">Export</button>
+          <div class="header-actions">
+            <button id="btn-import" class="btn-ghost-sm">Import</button>
+            <button id="btn-export" class="btn-ghost-sm">Export</button>
+          </div>
+          <input id="import-file-input" type="file" accept="application/json" class="hidden" />
         </div>
         <div class="library-filters">
           <div id="folder-tabs" class="folder-tabs"></div>

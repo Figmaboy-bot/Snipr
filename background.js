@@ -268,6 +268,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
       }
 
+      // ── Import ─────────────────────────────────────────────────────────────
+      // Merges a previously exported vault back in. Saves/folders are matched
+      // by id so re-importing the same file twice is a no-op rather than
+      // creating duplicates; categories are matched by exact string.
+      case "IMPORT_ALL": {
+        const incoming = message.data || {};
+        const incomingSaves = Array.isArray(incoming.saves) ? incoming.saves : [];
+        const incomingFolders = Array.isArray(incoming.folders) ? incoming.folders : [];
+        const incomingCategories = Array.isArray(incoming.categories) ? incoming.categories : [];
+
+        const { saves = [], folders = [], categories = [] } =
+          await chrome.storage.local.get(["saves", "folders", "categories"]);
+
+        const existingSaveIds = new Set(saves.map(s => s.id));
+        const addedSaves = incomingSaves.filter(s => s && s.id && !existingSaveIds.has(s.id));
+
+        const existingFolderIds = new Set(folders.map(f => f.id));
+        const addedFolders = incomingFolders.filter(f => f && f.id && !existingFolderIds.has(f.id));
+
+        const existingCategorySet = new Set(categories);
+        const addedCategories = incomingCategories.filter(c => c && !existingCategorySet.has(c));
+
+        await chrome.storage.local.set({
+          saves: [...saves, ...addedSaves],
+          folders: [...folders, ...addedFolders],
+          categories: [...categories, ...addedCategories],
+        });
+
+        sendResponse({
+          ok: true,
+          importedSaves: addedSaves.length,
+          skippedSaves: incomingSaves.length - addedSaves.length,
+          importedFolders: addedFolders.length,
+          importedCategories: addedCategories.length,
+          addedSaves,
+        });
+        break;
+      }
+
       default:
         sendResponse({ error: "Unknown message type" });
     }
