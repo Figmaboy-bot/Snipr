@@ -268,6 +268,7 @@ async function shareFolder() {
   btn.disabled = true;
   btn.textContent = "Sharing…";
 
+  let link;
   try {
     const ownerUid = state.user.uid;
     const shareRef = doc(collection(db, "shares"));
@@ -292,15 +293,27 @@ async function shareFolder() {
       await batch.commit();
     }
 
-    const link = `${location.origin}/share.html?id=${shareRef.id}`;
-    await navigator.clipboard.writeText(link);
-    showToast(`🔗 Link copied — shares ${saves.length} snip${saves.length !== 1 ? "s" : ""} from ${folder?.name || "this folder"}`);
+    link = `${location.origin}/share.html?id=${shareRef.id}`;
   } catch (err) {
     console.error("share failed", err);
     showToast("Couldn't create share link", "error");
-  } finally {
     btn.disabled = false;
     btn.textContent = originalText;
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = originalText;
+
+  // The share itself is already created at this point — clipboard access is
+  // best-effort and shouldn't make a successful share look like it failed.
+  // navigator.clipboard.writeText throws NotAllowedError if the document
+  // loses focus while the Firestore writes above were in flight (e.g. devtools
+  // or another tab had focus), which is common enough to need a fallback.
+  try {
+    await navigator.clipboard.writeText(link);
+    showToast(`🔗 Link copied — shares ${saves.length} snip${saves.length !== 1 ? "s" : ""} from ${folder?.name || "this folder"}`);
+  } catch (_) {
+    window.prompt(`Share created — copy this link (${saves.length} snip${saves.length !== 1 ? "s" : ""}):`, link);
   }
 }
 
