@@ -19,6 +19,7 @@ import {
   orderBy,
   onSnapshot,
   deleteDoc,
+  setDoc,
   writeBatch,
   serverTimestamp,
 } from "firebase/firestore";
@@ -301,6 +302,143 @@ async function shareFolder() {
 }
 
 $("btn-share-folder").addEventListener("click", shareFolder);
+
+// ── Export / Import ──────────────────────────────────────────────────────────
+// Operates on your whole cloud vault (every folder/category/save synced to
+// Firestore) — distinct from the Chrome extension's own Export/Import, which
+// only covers that one browser's local, possibly-unsynced storage. The two
+// produce/accept the same JSON shape, so a file exported from either side can
+// be imported into the other.
+function exportVault() {
+  const saves = state.saves.map(({ syncedAt, ...rest }) => rest);
+  const data = { saves, folders: state.folders, categories: state.categories };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `snipr-export-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+$("btn-export").addEventListener("click", exportVault);
+
+// Firestore documents are capped at 1MB. A file exported from the extension
+// can carry full-resolution local screenshots, so re-compress before writing
+// to the cloud — mirrors popup.js's compressScreenshotForCloud/prepareSaveForCloud.
+async function compressScreenshotForCloud(dataUrl) {
+  if (!dataUrl) return null;
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = dataUrl;
+    });
+    const maxW = 1200;
+    const scale = Math.min(1, maxW / img.width);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+    let out = canvas.toDataURL("image/jpeg", 0.8);
+    if (out.length > 600_000) out = canvas.toDataURL("image/jpeg", 0.5);
+    if (out.length > 600_000) return null;
+    return out;
+  } catch (_e) {
+    return null;
+  }
+}
+
+async function prepareSaveForImport(save) {
+  const MAX_HTML = 250_000;
+  const html = save.html && save.html.length > MAX_HTML
+    ? save.html.slice(0, MAX_HTML) + "\n<!-- truncated for cloud sync -->"
+    : (save.html || "");
+
+  const assets = save.assets
+    ? {
+        fonts: (save.assets.fonts || []).slice(0, 20),
+        colors: (save.assets.colors || []).slice(0, 30),
+        images: (save.assets.images || []).slice(0, 24),
+        svgs: (save.assets.svgs || []).filter(s => s.length < 20_000).slice(0, 12),
+      }
+    : null;
+
+  const screenshot = await compressScreenshotForCloud(save.screenshot);
+  const cloudSave = { ...save, html, assets, screenshot };
+  if (JSON.stringify(cloudSave).length > 950_000) cloudSave.screenshot = null;
+  return cloudSave;
+}
+
+async function importVaultFromFile(file) {
+  let parsed;
+  try {
+    parsed = JSON.parse(await file.text());
+  } catch (_e) {
+    return showToast("Not a valid JSON file", "error");
+  }
+  if (!parsed || !Array.isArray(parsed.saves)) {
+    return showToast("Doesn't look like a Snipr export", "error");
+  }
+
+  const btn = $("btn-import");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Importing…";
+
+  try {
+    const existingSaveIds = new Set(state.saves.map(s => s.id));
+    const incomingSaves = parsed.saves.filter(s => s && s.id);
+    const newSaves = incomingSaves.filter(s => !existingSaveIds.has(s.id));
+    const skipped = incomingSaves.length - newSaves.length;
+
+    const existingFolderIds = new Set(state.folders.map(f => f.id));
+    const newFolders = (Array.isArray(parsed.folders) ? parsed.folders : [])
+      .filter(f => f?.id && !existingFolderIds.has(f.id));
+
+    const existingCategorySet = new Set(state.categories);
+    const newCategories = (Array.isArray(parsed.categories) ? parsed.categories : [])
+      .filter(c => c && !existingCategorySet.has(c));
+
+    if (newFolders.length || newCategories.length) {
+      await setDoc(
+        doc(db, "users", state.user.uid, "meta", "config"),
+        { folders: [...state.folders, ...newFolders], categories: [...state.categories, ...newCategories] },
+        { merge: true }
+      );
+    }
+
+    const prepared = [];
+    for (const save of newSaves) prepared.push(await prepareSaveForImport(save));
+
+    // Chunk into batches of 400 to stay under Firestore's 500-write limit.
+    for (let i = 0; i < prepared.length; i += 400) {
+      const batch = writeBatch(db);
+      prepared.slice(i, i + 400).forEach(save =>
+        batch.set(doc(db, "users", state.user.uid, "saves", save.id), save, { merge: true })
+      );
+      await batch.commit();
+    }
+
+    const parts = [`Imported ${newSaves.length} snip${newSaves.length !== 1 ? "s" : ""}`];
+    if (skipped) parts.push(`${skipped} already in your library`);
+    showToast(`✂ ${parts.join(" — ")}`);
+  } catch (err) {
+    console.error("import failed", err);
+    showToast("Import failed", "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+$("btn-import").addEventListener("click", () => $("import-file-input").click());
+$("import-file-input").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (file) await importVaultFromFile(file);
+});
 
 let searchDebounce = null;
 $("search-input").addEventListener("input", e => {
