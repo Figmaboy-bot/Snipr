@@ -3,12 +3,16 @@
   "private": true,
   "scripts": {
     "build:auth": "node scripts/build-auth.mjs",
+    "build:merge": "node scripts/build-merge.mjs",
     "build:webapp": "node scripts/build-webapp.mjs",
     "watch:webapp": "node scripts/build-webapp.mjs --watch",
-    "build": "npm run build:auth && npm run build:webapp"
+    "build": "npm run build:auth && npm run build:merge && npm run build:webapp",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "esbuild": "^0.25.12"
+    "esbuild": "^0.25.12",
+    "jsdom": "^25.0.1",
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "firebase": "^11.10.0",

@@ -34,6 +34,7 @@ import {
   renderDetailAssets,
   wireAssetClicks,
 } from "./render-helpers.js";
+import { computeImportDelta, chunk } from "../../shared/merge.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -285,9 +286,9 @@ async function shareFolder() {
     await metaBatch.commit();
 
     // Chunk into batches of 400 to stay under Firestore's 500-write limit.
-    for (let i = 0; i < saves.length; i += 400) {
+    for (const batchSaves of chunk(saves, 400)) {
       const batch = writeBatch(db);
-      for (const save of saves.slice(i, i + 400)) {
+      for (const save of batchSaves) {
         batch.set(doc(db, "shares", shareRef.id, "saves", save.id), { ...save, ownerUid });
       }
       await batch.commit();
@@ -404,18 +405,7 @@ async function importVaultFromFile(file) {
   btn.textContent = "Importing…";
 
   try {
-    const existingSaveIds = new Set(state.saves.map(s => s.id));
-    const incomingSaves = parsed.saves.filter(s => s && s.id);
-    const newSaves = incomingSaves.filter(s => !existingSaveIds.has(s.id));
-    const skipped = incomingSaves.length - newSaves.length;
-
-    const existingFolderIds = new Set(state.folders.map(f => f.id));
-    const newFolders = (Array.isArray(parsed.folders) ? parsed.folders : [])
-      .filter(f => f?.id && !existingFolderIds.has(f.id));
-
-    const existingCategorySet = new Set(state.categories);
-    const newCategories = (Array.isArray(parsed.categories) ? parsed.categories : [])
-      .filter(c => c && !existingCategorySet.has(c));
+    const { newSaves, skippedSaves, newFolders, newCategories } = computeImportDelta(state, parsed);
 
     if (newFolders.length || newCategories.length) {
       await setDoc(
@@ -429,16 +419,16 @@ async function importVaultFromFile(file) {
     for (const save of newSaves) prepared.push(await prepareSaveForImport(save));
 
     // Chunk into batches of 400 to stay under Firestore's 500-write limit.
-    for (let i = 0; i < prepared.length; i += 400) {
+    for (const batchSaves of chunk(prepared, 400)) {
       const batch = writeBatch(db);
-      prepared.slice(i, i + 400).forEach(save =>
+      batchSaves.forEach(save =>
         batch.set(doc(db, "users", state.user.uid, "saves", save.id), save, { merge: true })
       );
       await batch.commit();
     }
 
     const parts = [`Imported ${newSaves.length} snip${newSaves.length !== 1 ? "s" : ""}`];
-    if (skipped) parts.push(`${skipped} already in your library`);
+    if (skippedSaves) parts.push(`${skippedSaves} already in your library`);
     showToast(`✂ ${parts.join(" — ")}`);
   } catch (err) {
     console.error("import failed", err);
@@ -748,13 +738,14 @@ async function revokeShare(shareId) {
     const saveDocs = savesSnap.docs;
 
     // Chunk into batches of 400 to stay under Firestore's 500-write limit.
-    for (let i = 0; i < saveDocs.length; i += 400) {
+    const batches = chunk(saveDocs, 400);
+    for (let i = 0; i < batches.length; i++) {
       const batch = writeBatch(db);
-      saveDocs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+      batches[i].forEach(d => batch.delete(d.ref));
       if (i === 0) batch.delete(doc(db, "shares", shareId));
       await batch.commit();
     }
-    if (!saveDocs.length) await deleteDoc(doc(db, "shares", shareId));
+    if (!batches.length) await deleteDoc(doc(db, "shares", shareId));
 
     showToast("Link revoked");
   } catch (err) {
