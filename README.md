@@ -65,6 +65,8 @@ Notes:
 
 In the web app, select a folder tab (not "All") and click **🔗 Share** to publish a public, read-only snapshot of everything currently in that folder — the link (`/share.html?id=…`) works for anyone, no sign-in required. It's a snapshot: snips added to the folder afterward won't show up on that link unless you share again, which publishes a new, independent link.
 
+Click **🔗 My Shares** in the header to see every link you've published and **Revoke** any of them — revoking deletes the shared snapshot entirely (not just the listing), so the link stops working immediately for anyone who has it.
+
 ## Usage
 
 1. Open the popup and click **Sign in** / **Sign up** — this opens the web app to authenticate (email/password or Google). Session persists across popup opens.
