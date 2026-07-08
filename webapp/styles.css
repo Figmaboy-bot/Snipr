@@ -534,6 +534,42 @@ body {
   min-height: 240px;
 }
 
+/* ── My Shares modal ── */
+.shares-list {
+  padding: 12px 20px 20px;
+  overflow: auto;
+  flex: 1;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.share-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.share-row-icon { font-size: 22px; line-height: 1; }
+
+.share-row-body { flex: 1; min-width: 0; }
+.share-row-title { font-weight: 600; font-size: 14px; }
+.share-row-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.share-row-link {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
 .detail-screenshot {
   max-width: 100%;
   border-radius: 8px;

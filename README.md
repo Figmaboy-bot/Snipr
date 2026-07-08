@@ -121,7 +121,7 @@ You can use any design tool or generate them online. A simple hexagon works grea
 
 ## Next Steps / Roadmap
 
-- [ ] Screenshot capture of selected sections
+- [x] Screenshot capture of selected sections
 - [x] HTML preview in library cards
 - [x] Search across saved sections
 - [x] Import from JSON export

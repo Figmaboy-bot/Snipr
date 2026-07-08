@@ -16,8 +16,10 @@ import {
   collection,
   doc,
   query,
+  where,
   orderBy,
   onSnapshot,
+  getDocs,
   deleteDoc,
   setDoc,
   writeBatch,
@@ -197,6 +199,7 @@ function subscribeLibrary(uid) {
 function teardownLibrary() {
   if (unsubSaves) { unsubSaves(); unsubSaves = null; }
   if (unsubMeta) { unsubMeta(); unsubMeta = null; }
+  closeSharesModal();
   state.saves = [];
   state.folders = [];
   state.categories = [];
@@ -645,7 +648,9 @@ $("detail-modal").addEventListener("click", e => {
   if (e.target === $("detail-modal")) closeDetail();
 });
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") closeDetail();
+  if (e.key !== "Escape") return;
+  closeDetail();
+  closeSharesModal();
 });
 
 $("btn-delete-detail").addEventListener("click", async () => {
@@ -653,5 +658,101 @@ $("btn-delete-detail").addEventListener("click", async () => {
   if (!confirm(`Delete "${state.detailSave.label}" from your cloud library?`)) return;
   await deleteSave(state.detailSave.id);
   closeDetail();
+});
+
+// ── My Shares modal ──────────────────────────────────────────────────────────
+let unsubMyShares = null;
+
+function openSharesModal() {
+  if (!state.user) return;
+  $("shares-modal").classList.remove("hidden");
+  $("shares-list").innerHTML = "";
+  $("shares-empty").classList.add("hidden");
+  $("shares-loading").classList.remove("hidden");
+
+  const sharesQuery = query(collection(db, "shares"), where("ownerUid", "==", state.user.uid));
+  unsubMyShares = onSnapshot(sharesQuery, snap => {
+    const shares = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    $("shares-loading").classList.add("hidden");
+    renderShares(shares);
+  }, err => {
+    console.error("shares subscription failed", err);
+    $("shares-loading").classList.add("hidden");
+    showToast("Couldn't load your shared links", "error");
+  });
+}
+
+function closeSharesModal() {
+  $("shares-modal").classList.add("hidden");
+  if (unsubMyShares) { unsubMyShares(); unsubMyShares = null; }
+}
+
+function renderShares(shares) {
+  const list = $("shares-list");
+  list.innerHTML = "";
+  $("shares-empty").classList.toggle("hidden", shares.length > 0);
+
+  shares.forEach(share => {
+    const link = `${location.origin}/share.html?id=${share.id}`;
+    const row = document.createElement("div");
+    row.className = "share-row";
+    row.innerHTML = `
+      <span class="share-row-icon">${escapeHtml(share.folderIcon || "📁")}</span>
+      <div class="share-row-body">
+        <div class="share-row-title">${escapeHtml(share.folderName || "Snips")}</div>
+        <div class="share-row-meta">${share.count ?? 0} snip${share.count === 1 ? "" : "s"} · Shared ${share.createdAt?.toDate ? share.createdAt.toDate().toLocaleDateString() : "recently"}</div>
+        <div class="share-row-link">${escapeHtml(link)}</div>
+      </div>
+      <div class="share-row-actions">
+        <button class="btn-ghost-sm btn-copy-share" title="Copy link">Copy</button>
+        <button class="btn-danger-sm btn-revoke-share" title="Revoke this link">Revoke</button>
+      </div>
+    `;
+
+    row.querySelector(".btn-copy-share").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(link);
+        showToast("Link copied");
+      } catch (_) {
+        showToast("Failed to copy", "error");
+      }
+    });
+
+    row.querySelector(".btn-revoke-share").addEventListener("click", async () => {
+      if (!confirm(`Revoke the share link for "${share.folderName || "this folder"}"? Anyone with the link will lose access.`)) return;
+      await revokeShare(share.id);
+    });
+
+    list.appendChild(row);
+  });
+}
+
+async function revokeShare(shareId) {
+  try {
+    const savesSnap = await getDocs(collection(db, "shares", shareId, "saves"));
+    const saveDocs = savesSnap.docs;
+
+    // Chunk into batches of 400 to stay under Firestore's 500-write limit.
+    for (let i = 0; i < saveDocs.length; i += 400) {
+      const batch = writeBatch(db);
+      saveDocs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+      if (i === 0) batch.delete(doc(db, "shares", shareId));
+      await batch.commit();
+    }
+    if (!saveDocs.length) await deleteDoc(doc(db, "shares", shareId));
+
+    showToast("Link revoked");
+  } catch (err) {
+    console.error("revoke share failed", err);
+    showToast("Couldn't revoke link", "error");
+  }
+}
+
+$("btn-my-shares").addEventListener("click", openSharesModal);
+$("btn-close-shares").addEventListener("click", closeSharesModal);
+$("shares-modal").addEventListener("click", e => {
+  if (e.target === $("shares-modal")) closeSharesModal();
 });
 

@@ -42,6 +42,7 @@
       </div>
       <div class="nav-right">
         <span id="user-email" class="user-email"></span>
+        <button id="btn-my-shares" class="btn-ghost-sm" title="View and revoke your shared links">🔗 My Shares</button>
         <button id="btn-import" class="btn-ghost-sm" title="Import a Snipr export into your cloud library">Import</button>
         <button id="btn-export" class="btn-ghost-sm" title="Export your whole cloud library as JSON">Export</button>
         <input id="import-file-input" type="file" accept="application/json" class="hidden" />
@@ -119,6 +120,27 @@
         <div class="detail-row hidden" id="detail-categories-row"><span class="detail-row-label">🏷️ Tags</span><div id="detail-categories"></div></div>
         <div class="detail-row hidden" id="detail-note-row"><span class="detail-row-label">📝 Note</span><span id="detail-note"></span></div>
         <div id="detail-assets"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── My Shares modal ─────────────────────────────────────────────────── -->
+  <div id="shares-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">My Shared Links</h3>
+        <div class="modal-header-actions">
+          <button id="btn-close-shares" class="btn-ghost-sm">✕</button>
+        </div>
+      </div>
+      <div id="shares-list" class="shares-list"></div>
+      <div id="shares-empty" class="empty-state hidden">
+        <div class="empty-icon">🔗</div>
+        <p>You haven't shared any folders yet.<br/>Select a folder in your library and hit <strong>Share</strong>.</p>
+      </div>
+      <div id="shares-loading" class="empty-state">
+        <div class="empty-icon">☁</div>
+        <p>Loading your shared links…</p>
       </div>
     </div>
   </div>
