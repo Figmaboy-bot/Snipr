@@ -338,6 +338,12 @@ body {
   gap: 16px;
 }
 
+.load-more-row {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 8px;
+}
+
 .save-card {
   border: 1px solid var(--border);
   border-radius: 12px;

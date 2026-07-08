@@ -24,6 +24,7 @@ import {
   setDoc,
   writeBatch,
   serverTimestamp,
+  increment,
 } from "firebase/firestore";
 import { firebaseConfig } from "../../firebase-config.js";
 import {
@@ -77,6 +78,10 @@ async function handoffToExtension(user) {
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
+const PAGE_SIZE = 24;
+// Mirrors the cap enforced in firestore.rules — kept in sync there.
+const MAX_ACTIVE_SHARES = 50;
+
 const state = {
   user: null,
   saves: [],
@@ -85,6 +90,8 @@ const state = {
   folderFilter: null,
   categoryFilter: "",
   searchQuery: "",
+  visibleCount: PAGE_SIZE,
+  shareCount: 0,
   detailSave: null,
   loaded: false,
 };
@@ -191,6 +198,7 @@ function subscribeLibrary(uid) {
     const data = snap.data() || {};
     state.folders = data.folders || [];
     state.categories = data.categories || [];
+    state.shareCount = data.shareCount || 0;
     renderFolderTabs();
     renderCategoryFilter();
     renderLibrary();
@@ -207,9 +215,11 @@ function teardownLibrary() {
   state.folderFilter = null;
   state.categoryFilter = "";
   state.searchQuery = "";
+  state.visibleCount = PAGE_SIZE;
   $("search-input").value = "";
   $("btn-clear-search").classList.add("hidden");
   $("btn-share-folder").classList.add("hidden");
+  $("library-load-more").classList.add("hidden");
   closeDetail();
 }
 
@@ -221,14 +231,14 @@ function renderFolderTabs() {
   const allTab = document.createElement("div");
   allTab.className = "tab" + (!state.folderFilter ? " active" : "");
   allTab.textContent = "All";
-  allTab.addEventListener("click", () => { state.folderFilter = null; renderFolderTabs(); renderLibrary(); });
+  allTab.addEventListener("click", () => { state.folderFilter = null; state.visibleCount = PAGE_SIZE; renderFolderTabs(); renderLibrary(); });
   el.appendChild(allTab);
 
   state.folders.forEach(f => {
     const tab = document.createElement("div");
     tab.className = "tab" + (state.folderFilter === f.id ? " active" : "");
     tab.textContent = `${f.icon} ${f.name}`;
-    tab.addEventListener("click", () => { state.folderFilter = f.id; renderFolderTabs(); renderLibrary(); });
+    tab.addEventListener("click", () => { state.folderFilter = f.id; state.visibleCount = PAGE_SIZE; renderFolderTabs(); renderLibrary(); });
     el.appendChild(tab);
   });
 
@@ -250,6 +260,7 @@ function renderCategoryFilter() {
 
 $("category-filter").addEventListener("change", e => {
   state.categoryFilter = e.target.value;
+  state.visibleCount = PAGE_SIZE;
   renderLibrary();
 });
 
@@ -263,6 +274,10 @@ async function shareFolder() {
   const folder = state.folders.find(f => f.id === state.folderFilter);
   const saves = state.saves.filter(s => s.folderId === state.folderFilter);
   if (!saves.length) return showToast("This folder is empty — nothing to share", "error");
+  if (saves.length > 500) return showToast("This folder has more than 500 snips — too large to share in one link", "error");
+  if (state.shareCount >= MAX_ACTIVE_SHARES) {
+    return showToast(`You've reached the ${MAX_ACTIVE_SHARES} shared-link limit — revoke one from My Shares first`, "error");
+  }
 
   const btn = $("btn-share-folder");
   const originalText = btn.textContent;
@@ -283,6 +298,14 @@ async function shareFolder() {
       count: saves.length,
       createdAt: serverTimestamp(),
     });
+    // Kept in the same batch as the share create — the rule reads this
+    // doc's pre-batch value, so this only protects future creates, not
+    // this one, but that's fine: it's what keeps the counter accurate.
+    metaBatch.set(
+      doc(db, "users", ownerUid, "meta", "config"),
+      { shareCount: increment(1) },
+      { merge: true }
+    );
     await metaBatch.commit();
 
     // Chunk into batches of 400 to stay under Firestore's 500-write limit.
@@ -453,6 +476,7 @@ $("search-input").addEventListener("input", e => {
   clearTimeout(searchDebounce);
   searchDebounce = setTimeout(() => {
     state.searchQuery = value.trim().toLowerCase();
+    state.visibleCount = PAGE_SIZE;
     renderLibrary();
   }, 150);
 });
@@ -461,6 +485,7 @@ $("btn-clear-search").addEventListener("click", () => {
   $("search-input").value = "";
   $("btn-clear-search").classList.add("hidden");
   state.searchQuery = "";
+  state.visibleCount = PAGE_SIZE;
   renderLibrary();
   $("search-input").focus();
 });
@@ -501,7 +526,12 @@ function renderLibrary() {
       : "Nothing here yet.<br/>Save sections with the Snipr extension — signed in with the same account — and they'll appear here.";
   }
 
-  saves.forEach(save => {
+  const visible = saves.slice(0, state.visibleCount);
+  const remaining = saves.length - visible.length;
+  $("btn-load-more").textContent = `Load more (${visible.length} of ${saves.length})`;
+  $("library-load-more").classList.toggle("hidden", remaining <= 0);
+
+  visible.forEach(save => {
     const folder = state.folders.find(f => f.id === save.folderId);
     const card = document.createElement("div");
     card.className = "save-card";
@@ -539,6 +569,11 @@ function renderLibrary() {
     grid.appendChild(card);
   });
 }
+
+$("btn-load-more").addEventListener("click", () => {
+  state.visibleCount += PAGE_SIZE;
+  renderLibrary();
+});
 
 async function deleteSave(saveId) {
   try {
@@ -680,6 +715,14 @@ function openSharesModal() {
       .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
     $("shares-loading").classList.add("hidden");
     renderShares(shares);
+
+    // Self-heals shareCount drift (e.g. shares that predate this counter,
+    // or a batch that partially failed) against the true live count —
+    // cheap to check every time this modal opens, keeps the abuse-guard
+    // cap accurate without a manual migration.
+    if (shares.length !== state.shareCount) {
+      setDoc(doc(db, "users", state.user.uid, "meta", "config"), { shareCount: shares.length }, { merge: true }).catch(() => {});
+    }
   }, err => {
     console.error("shares subscription failed", err);
     $("shares-loading").classList.add("hidden");
@@ -736,16 +779,25 @@ async function revokeShare(shareId) {
   try {
     const savesSnap = await getDocs(collection(db, "shares", shareId, "saves"));
     const saveDocs = savesSnap.docs;
+    const shareCountRef = doc(db, "users", state.user.uid, "meta", "config");
 
     // Chunk into batches of 400 to stay under Firestore's 500-write limit.
     const batches = chunk(saveDocs, 400);
     for (let i = 0; i < batches.length; i++) {
       const batch = writeBatch(db);
       batches[i].forEach(d => batch.delete(d.ref));
-      if (i === 0) batch.delete(doc(db, "shares", shareId));
+      if (i === 0) {
+        batch.delete(doc(db, "shares", shareId));
+        batch.set(shareCountRef, { shareCount: increment(-1) }, { merge: true });
+      }
       await batch.commit();
     }
-    if (!batches.length) await deleteDoc(doc(db, "shares", shareId));
+    if (!batches.length) {
+      const soloBatch = writeBatch(db);
+      soloBatch.delete(doc(db, "shares", shareId));
+      soloBatch.set(shareCountRef, { shareCount: increment(-1) }, { merge: true });
+      await soloBatch.commit();
+    }
 
     showToast("Link revoked");
   } catch (err) {

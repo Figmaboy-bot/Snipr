@@ -11,9 +11,28 @@ service cloud.firestore {
     // get()), and anyone with the link can read it — no auth required.
     // Only the owner can update/delete; there's no need to ever update a
     // published share, but delete lets someone revoke a link they made.
+    //
+    // Abuse guard: caps each share to 500 snips, and caps each user to 50
+    // active shares via users/{uid}/meta/config.shareCount (maintained by
+    // the webapp client, incremented/decremented alongside each create and
+    // revoke). Firestore rules can't run a count query, so this is the only
+    // way to enforce a limit server-side — but note the users/{userId}
+    // rule above already grants the owner unrestricted write access to
+    // that same meta/config doc, so a client deliberately bypassing the
+    // app (raw SDK/REST calls) could reset its own counter. This stops
+    // accidental loops/bugs and casual abuse through the actual app, not a
+    // determined attacker with API access — the same trust boundary this
+    // whole ruleset already extends to every other field a user owns.
     match /shares/{shareId} {
       allow read: if true;
-      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow create: if request.auth != null
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.count is int
+        && request.resource.data.count <= 500
+        && (
+          !exists(/databases/$(database)/documents/users/$(request.auth.uid)/meta/config)
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)/meta/config).data.get('shareCount', 0) < 50
+        );
       allow update, delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
 
       match /saves/{saveId} {
