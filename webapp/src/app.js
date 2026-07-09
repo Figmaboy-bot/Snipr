@@ -192,6 +192,7 @@ $("btn-sign-out").addEventListener("click", () => signOut(auth));
 // tells the caller whether the email has an account (a product decision, not
 // an oversight — see api/request-password-otp.js for the tradeoff).
 let otpCooldownTimer = null;
+let forgotIsCreate = false;
 
 function showForgotError(msg) {
   const el = $("forgot-error");
@@ -209,6 +210,8 @@ function showForgotScreen() {
   $("forgot-otp").value = "";
   $("forgot-new-password").value = "";
   $("forgot-confirm-password").value = "";
+  forgotIsCreate = false;
+  $("btn-reset-password").textContent = "Reset password";
 }
 
 function showSignInScreen() {
@@ -257,14 +260,18 @@ $("btn-send-otp").addEventListener("click", async () => {
     if (!data.exists) {
       return showForgotError("No account found for that email.");
     }
-    if (data.googleOnly) {
-      return showForgotError("This account signs in with Google — use “Continue with Google” instead.");
-    }
+    forgotIsCreate = !!data.googleOnly;
     $("forgot-email-display").textContent = email;
+    $("forgot-otp-intro").textContent = forgotIsCreate
+      ? "then create a password. You'll still be able to sign in with Google too."
+      : "then choose a new password.";
+    $("btn-reset-password").textContent = forgotIsCreate ? "Create password" : "Reset password";
     $("forgot-step-email").classList.add("hidden");
     $("forgot-step-otp").classList.remove("hidden");
     startResendCooldown();
-    showToast(`Code sent to ${email}`);
+    showToast(forgotIsCreate
+      ? `Code sent to ${email} — enter it below to set a password for this account`
+      : `Code sent to ${email}`);
   } catch (err) {
     showForgotError(err.message);
   } finally {
@@ -297,8 +304,9 @@ $("btn-reset-password").addEventListener("click", async () => {
   if (newPassword !== confirmPassword) return showForgotError("Passwords don't match.");
 
   const btn = $("btn-reset-password");
+  const originalText = btn.textContent;
   btn.disabled = true;
-  btn.textContent = "Resetting…";
+  btn.textContent = forgotIsCreate ? "Creating…" : "Resetting…";
   try {
     const res = await fetch(VERIFY_OTP_URL, {
       method: "POST",
@@ -311,12 +319,14 @@ $("btn-reset-password").addEventListener("click", async () => {
     showSignInScreen();
     $("auth-email").value = email;
     $("auth-password").value = "";
-    showToast("Password reset — sign in with your new password.");
+    showToast(forgotIsCreate
+      ? "Password created — you can now sign in with it or with Google."
+      : "Password reset — sign in with your new password.");
   } catch (err) {
     showForgotError(err.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = "Reset password";
+    btn.textContent = originalText;
   }
 });
 

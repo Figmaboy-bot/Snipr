@@ -81,10 +81,11 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: "Something went wrong — try again" });
   }
 
-  const hasPasswordProvider = userRecord.providerData.some(p => p.providerId === "password");
-  if (!hasPasswordProvider) {
-    return res.status(200).json({ exists: true, googleOnly: true });
-  }
+  // Google-only accounts have no password yet — still let them through the
+  // same OTP flow so they can set one (verify-password-otp.js's updateUser()
+  // call adds a password credential regardless of what the account already
+  // has). `googleOnly` just lets the frontend tweak the copy accordingly.
+  const googleOnly = !userRecord.providerData.some(p => p.providerId === "password");
 
   const otpRef = db.collection("passwordResetOtps").doc(email);
   const existing = await otpRef.get();
@@ -108,5 +109,5 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: "Couldn't send the email — try again" });
   }
 
-  return res.status(200).json({ exists: true });
+  return res.status(200).json({ exists: true, googleOnly });
 };

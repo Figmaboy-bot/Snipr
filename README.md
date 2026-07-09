@@ -68,6 +68,8 @@ Notes:
 
 Note this flow tells the user directly whether an email has an account ("No account found for that email") — a deliberate UX choice, not the enumeration-safe generic message a lot of auth flows use.
 
+Google-only accounts (no password set yet) go through the same flow — the copy switches to "create a password" instead of "reset," and afterward the account can sign in either way.
+
 ### Delete account
 
 Signed-in users can permanently delete their account from the web app header (**Delete Account**) — this wipes every synced snip, folder/category metadata, and any share links they've published, then reauthenticates (password or Google popup) and deletes the Firebase Auth user itself. Local snips saved in the extension aren't touched.
