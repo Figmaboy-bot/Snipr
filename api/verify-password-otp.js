@@ -19,10 +19,17 @@ function hashOtp(otp, email) {
   return crypto.createHash("sha256").update(`${otp}:${email}`).digest("hex");
 }
 
-// Step 2: checks the code against the hash stored by request-password-otp.js
-// and, if it matches and hasn't expired/been hammered past MAX_ATTEMPTS, sets
-// the new password directly via the Admin SDK — no session/reauth needed
-// since the OTP itself is the proof of email ownership.
+// Serves two steps of the forgot-password flow, both checking the code
+// against the hash stored by request-password-otp.js:
+//   - Called with just {email, otp}: check-only, for the standalone OTP
+//     screen — confirms the code is right without touching the account, and
+//     leaves the OTP doc in place (still needed by the step below).
+//   - Called with {email, otp, newPassword}: the final step, from the
+//     password screen — re-checks the same code, then sets the password via
+//     the Admin SDK and consumes the OTP. No session/reauth needed since the
+//     OTP itself is the proof of email ownership.
+// Both paths share the same `attempts` counter, so guessing wrong on the
+// OTP screen counts against the same MAX_ATTEMPTS as guessing wrong here.
 module.exports = async (req, res) => {
   const origin = req.headers.origin;
   if (ALLOWED_ORIGINS.includes(origin)) {
@@ -37,10 +44,13 @@ module.exports = async (req, res) => {
 
   const email = String(req.body?.email || "").trim().toLowerCase();
   const otp = String(req.body?.otp || "").trim();
+  const hasNewPassword = req.body?.newPassword !== undefined;
   const newPassword = String(req.body?.newPassword || "");
 
   if (!email || !otp) return res.status(400).json({ error: "Missing email or code" });
-  if (newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+  if (hasNewPassword && newPassword.length < 6) {
+    return res.status(400).json({ error: "Password must be at least 6 characters" });
+  }
 
   const otpRef = db.collection("passwordResetOtps").doc(email);
   const snap = await otpRef.get();
@@ -59,6 +69,10 @@ module.exports = async (req, res) => {
   if (hashOtp(otp, email) !== data.codeHash) {
     await otpRef.update({ attempts: admin.firestore.FieldValue.increment(1) });
     return res.status(400).json({ error: "Incorrect code" });
+  }
+
+  if (!hasNewPassword) {
+    return res.status(200).json({ ok: true, verified: true });
   }
 
   try {

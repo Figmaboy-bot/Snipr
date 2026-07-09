@@ -108,6 +108,31 @@ let unsubMeta = null;
 
 const $ = id => document.getElementById(id);
 
+// ── Password visibility toggles ─────────────────────────────────────────────
+// Wraps every .pw-input in a .pw-field and adds a Show/Hide button — done
+// once at load against the static markup, so it covers sign-in, forgot
+// password, and delete-account without repeating this per screen.
+document.querySelectorAll("input.pw-input").forEach(input => {
+  const field = document.createElement("div");
+  field.className = "pw-field";
+  input.parentNode.insertBefore(field, input);
+  field.appendChild(input);
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "pw-toggle-btn";
+  btn.textContent = "Show";
+  btn.setAttribute("aria-label", "Show password");
+  btn.tabIndex = -1;
+  btn.addEventListener("click", () => {
+    const hidden = input.type === "password";
+    input.type = hidden ? "text" : "password";
+    btn.textContent = hidden ? "Hide" : "Show";
+    btn.setAttribute("aria-label", hidden ? "Hide password" : "Show password");
+  });
+  field.appendChild(btn);
+});
+
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let toastTimer = null;
 function showToast(msg, type = "success") {
@@ -184,15 +209,16 @@ $("btn-google").addEventListener("click", async () => {
 
 $("btn-sign-out").addEventListener("click", () => signOut(auth));
 
-// ── Forgot password (email → OTP → new password) ────────────────────────────
+// ── Forgot password (email → verify code → set password) ────────────────────
 // Backed by api/request-password-otp.js and api/verify-password-otp.js, which
 // use the Admin SDK to check the account, mint a short-lived hashed 6-digit
-// code, email it via Resend, and — on verification — set the new password
-// directly. Unlike the rest of the app's auth errors, this flow deliberately
-// tells the caller whether the email has an account (a product decision, not
-// an oversight — see api/request-password-otp.js for the tradeoff).
+// code, email it via Resend, and verify it. Unlike the rest of the app's auth
+// errors, this flow deliberately tells the caller whether the email has an
+// account (a product decision, not an oversight — see
+// api/request-password-otp.js for the tradeoff).
 let otpCooldownTimer = null;
 let forgotIsCreate = false;
+let forgotVerifiedOtp = null;
 
 function showForgotError(msg) {
   const el = $("forgot-error");
@@ -200,18 +226,24 @@ function showForgotError(msg) {
   el.classList.remove("hidden");
 }
 
+function showForgotStep(stepId) {
+  ["forgot-step-email", "forgot-step-otp", "forgot-step-password"].forEach(id =>
+    $(id).classList.toggle("hidden", id !== stepId)
+  );
+  $("forgot-error").classList.add("hidden");
+}
+
 function showForgotScreen() {
   $("screen-auth").classList.add("hidden");
   $("screen-forgot").classList.remove("hidden");
-  $("forgot-error").classList.add("hidden");
-  $("forgot-step-otp").classList.add("hidden");
-  $("forgot-step-email").classList.remove("hidden");
   $("forgot-email").value = $("auth-email").value.trim();
   $("forgot-otp").value = "";
   $("forgot-new-password").value = "";
   $("forgot-confirm-password").value = "";
   forgotIsCreate = false;
+  forgotVerifiedOtp = null;
   $("btn-reset-password").textContent = "Reset password";
+  showForgotStep("forgot-step-email");
 }
 
 function showSignInScreen() {
@@ -225,6 +257,19 @@ async function requestOtp(email) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Something went wrong");
+  return data;
+}
+
+async function verifyOtp(email, otp, newPassword) {
+  const body = { email, otp };
+  if (newPassword !== undefined) body.newPassword = newPassword;
+  const res = await fetch(VERIFY_OTP_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Something went wrong");
@@ -247,6 +292,7 @@ function startResendCooldown(seconds = 60) {
 $("btn-forgot-password").addEventListener("click", showForgotScreen);
 $("btn-back-to-signin").addEventListener("click", showSignInScreen);
 
+// Step 1: email → send code
 $("btn-send-otp").addEventListener("click", async () => {
   $("forgot-error").classList.add("hidden");
   const email = $("forgot-email").value.trim();
@@ -262,16 +308,10 @@ $("btn-send-otp").addEventListener("click", async () => {
     }
     forgotIsCreate = !!data.googleOnly;
     $("forgot-email-display").textContent = email;
-    $("forgot-otp-intro").textContent = forgotIsCreate
-      ? "then create a password. You'll still be able to sign in with Google too."
-      : "then choose a new password.";
-    $("btn-reset-password").textContent = forgotIsCreate ? "Create password" : "Reset password";
-    $("forgot-step-email").classList.add("hidden");
-    $("forgot-step-otp").classList.remove("hidden");
+    $("forgot-otp").value = "";
+    showForgotStep("forgot-step-otp");
     startResendCooldown();
-    showToast(forgotIsCreate
-      ? `Code sent to ${email} — enter it below to set a password for this account`
-      : `Code sent to ${email}`);
+    showToast(`Code sent to ${email}`);
   } catch (err) {
     showForgotError(err.message);
   } finally {
@@ -292,36 +332,27 @@ $("btn-resend-otp").addEventListener("click", async () => {
   }
 });
 
-$("btn-reset-password").addEventListener("click", async () => {
+// Step 2: verify the code on its own, before ever asking for a password
+$("btn-verify-otp").addEventListener("click", async () => {
   $("forgot-error").classList.add("hidden");
   const email = $("forgot-email").value.trim();
   const otp = $("forgot-otp").value.trim();
-  const newPassword = $("forgot-new-password").value;
-  const confirmPassword = $("forgot-confirm-password").value;
-
   if (!/^\d{6}$/.test(otp)) return showForgotError("Enter the 6-digit code.");
-  if (newPassword.length < 6) return showForgotError("Password must be at least 6 characters.");
-  if (newPassword !== confirmPassword) return showForgotError("Passwords don't match.");
 
-  const btn = $("btn-reset-password");
+  const btn = $("btn-verify-otp");
   const originalText = btn.textContent;
   btn.disabled = true;
-  btn.textContent = forgotIsCreate ? "Creating…" : "Resetting…";
+  btn.textContent = "Verifying…";
   try {
-    const res = await fetch(VERIFY_OTP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, otp, newPassword }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || "Something went wrong");
-
-    showSignInScreen();
-    $("auth-email").value = email;
-    $("auth-password").value = "";
-    showToast(forgotIsCreate
-      ? "Password created — you can now sign in with it or with Google."
-      : "Password reset — sign in with your new password.");
+    await verifyOtp(email, otp);
+    forgotVerifiedOtp = otp;
+    $("forgot-password-intro").textContent = forgotIsCreate
+      ? "Create a password for your account. You'll still be able to sign in with Google too."
+      : "Choose a new password for your account.";
+    $("btn-reset-password").textContent = forgotIsCreate ? "Create password" : "Reset password";
+    $("forgot-new-password").value = "";
+    $("forgot-confirm-password").value = "";
+    showForgotStep("forgot-step-password");
   } catch (err) {
     showForgotError(err.message);
   } finally {
@@ -330,6 +361,48 @@ $("btn-reset-password").addEventListener("click", async () => {
   }
 });
 
+// Step 3: set the new password, re-sending the already-verified code
+$("btn-reset-password").addEventListener("click", async () => {
+  $("forgot-error").classList.add("hidden");
+  const email = $("forgot-email").value.trim();
+  const newPassword = $("forgot-new-password").value;
+  const confirmPassword = $("forgot-confirm-password").value;
+
+  if (newPassword.length < 6) return showForgotError("Password must be at least 6 characters.");
+  if (newPassword !== confirmPassword) return showForgotError("Passwords don't match.");
+  if (!forgotVerifiedOtp) {
+    showForgotStep("forgot-step-otp");
+    return showForgotError("That code expired — verify it again.");
+  }
+
+  const btn = $("btn-reset-password");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = forgotIsCreate ? "Creating…" : "Resetting…";
+  try {
+    await verifyOtp(email, forgotVerifiedOtp, newPassword);
+
+    showSignInScreen();
+    $("auth-email").value = email;
+    $("auth-password").value = "";
+    showToast(forgotIsCreate
+      ? "Password created — you can now sign in with it or with Google."
+      : "Password reset — sign in with your new password.");
+  } catch (err) {
+    // Most likely the code expired between steps 2 and 3 — send them back
+    // to re-verify rather than stranding them on a dead-end password screen.
+    forgotVerifiedOtp = null;
+    showForgotStep("forgot-step-otp");
+    showForgotError(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+});
+
+$("forgot-otp").addEventListener("keydown", e => {
+  if (e.key === "Enter") $("btn-verify-otp").click();
+});
 $("forgot-confirm-password").addEventListener("keydown", e => {
   if (e.key === "Enter") $("btn-reset-password").click();
 });

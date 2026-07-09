@@ -83,6 +83,24 @@ body {
 .text-input:focus { border-color: var(--accent); background: #fff; }
 .text-input::placeholder { color: var(--muted); }
 
+.pw-field { position: relative; }
+.pw-field .pw-input { padding-right: 56px; }
+.pw-toggle-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+}
+.pw-toggle-btn:hover { color: var(--accent); }
+
 .auth-btn-row { display: flex; gap: 8px; }
 .auth-btn-row > button { flex: 1; }
 
@@ -185,7 +203,7 @@ body {
 .link-btn:hover { color: var(--accent); text-decoration: underline; }
 .forgot-password-link { margin-top: -6px; }
 
-#forgot-step-email, #forgot-step-otp {
+#forgot-step-email, #forgot-step-otp, #forgot-step-password {
   display: flex;
   flex-direction: column;
   gap: 12px;

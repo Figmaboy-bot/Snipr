@@ -20,7 +20,7 @@
       <p class="auth-sub">Sign in to browse the snips you saved<br/>with the Snipr extension.</p>
 
       <input id="auth-email" type="email" placeholder="Email" class="text-input" autocomplete="email" />
-      <input id="auth-password" type="password" placeholder="Password" class="text-input" autocomplete="current-password" />
+      <input id="auth-password" type="password" placeholder="Password" class="text-input pw-input" autocomplete="current-password" />
       <button id="btn-forgot-password" class="link-btn forgot-password-link" type="button">Forgot password?</button>
       <div class="auth-btn-row">
         <button id="btn-sign-in" class="btn-primary">Sign in</button>
@@ -49,12 +49,17 @@
       </div>
 
       <div id="forgot-step-otp" class="hidden">
-        <p class="auth-sub">Enter the 6-digit code sent to <strong id="forgot-email-display"></strong>, <span id="forgot-otp-intro">then choose a new password.</span></p>
+        <p class="auth-sub">Enter the 6-digit code sent to <strong id="forgot-email-display"></strong>.</p>
         <input id="forgot-otp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" class="text-input" />
-        <input id="forgot-new-password" type="password" placeholder="New password" class="text-input" autocomplete="new-password" />
-        <input id="forgot-confirm-password" type="password" placeholder="Confirm new password" class="text-input" autocomplete="new-password" />
-        <button id="btn-reset-password" class="btn-primary forgot-full-btn">Reset password</button>
+        <button id="btn-verify-otp" class="btn-primary forgot-full-btn">Verify code</button>
         <button id="btn-resend-otp" class="link-btn forgot-password-link" type="button">Resend code</button>
+      </div>
+
+      <div id="forgot-step-password" class="hidden">
+        <p class="auth-sub" id="forgot-password-intro">Choose a new password for your account.</p>
+        <input id="forgot-new-password" type="password" placeholder="New password" class="text-input pw-input" autocomplete="new-password" />
+        <input id="forgot-confirm-password" type="password" placeholder="Confirm new password" class="text-input pw-input" autocomplete="new-password" />
+        <button id="btn-reset-password" class="btn-primary forgot-full-btn">Reset password</button>
       </div>
 
       <p id="forgot-error" class="auth-error hidden"></p>
@@ -196,7 +201,7 @@
         </p>
         <div id="delete-password-row" class="hidden">
           <label class="field-label" for="delete-password-input">Confirm your password</label>
-          <input id="delete-password-input" type="password" class="text-input" autocomplete="current-password" />
+          <input id="delete-password-input" type="password" class="text-input pw-input" autocomplete="current-password" />
         </div>
         <div>
           <label class="field-label" for="delete-confirm-input">Type <strong>DELETE</strong> to confirm</label>
