@@ -208,7 +208,7 @@ async function captureSectionScreenshot(sectionId) {
 
     return await stitchSlices(slices, rect.width);
   } catch (err) {
-    console.error("DesignVault: screenshot capture failed", err);
+    console.error("Snipr: screenshot capture failed", err);
     return null;
   }
 }

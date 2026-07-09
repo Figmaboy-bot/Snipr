@@ -1,4 +1,4 @@
-// DesignVault — Background Service Worker
+// Snipr — Background Service Worker
 
 // Loads SnprFirebaseAuth (self.SnprFirebaseAuth) so this service worker can
 // complete the webapp → extension sign-in handoff even when no popup is open.
@@ -98,7 +98,7 @@ async function captureAndCrop(tabId, windowId, rect, dpr, viewportWidth, viewpor
     return "data:image/png;base64," + btoa(outBinary);
 
   } catch (err) {
-    console.warn("DesignVault: background screenshot failed", err);
+    console.warn("Snipr: background screenshot failed", err);
     return null;
   }
 }
