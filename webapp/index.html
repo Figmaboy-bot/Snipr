@@ -21,6 +21,7 @@
 
       <input id="auth-email" type="email" placeholder="Email" class="text-input" autocomplete="email" />
       <input id="auth-password" type="password" placeholder="Password" class="text-input" autocomplete="current-password" />
+      <button id="btn-forgot-password" class="link-btn forgot-password-link" type="button">Forgot password?</button>
       <div class="auth-btn-row">
         <button id="btn-sign-in" class="btn-primary">Sign in</button>
         <button id="btn-sign-up" class="btn-ghost">Sign up</button>
@@ -31,6 +32,33 @@
         Continue with Google
       </button>
       <p id="auth-error" class="auth-error hidden"></p>
+    </div>
+  </div>
+
+  <!-- ── Forgot password screen ──────────────────────────────────────────── -->
+  <div id="screen-forgot" class="screen-auth hidden">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <span class="logo-text">Snipr</span>
+      </div>
+
+      <div id="forgot-step-email">
+        <p class="auth-sub">Enter your account email and we'll send you a 6-digit code to reset your password.</p>
+        <input id="forgot-email" type="email" placeholder="Email" class="text-input" autocomplete="email" />
+        <button id="btn-send-otp" class="btn-primary forgot-full-btn">Send code</button>
+      </div>
+
+      <div id="forgot-step-otp" class="hidden">
+        <p class="auth-sub">Enter the 6-digit code sent to <strong id="forgot-email-display"></strong>, then choose a new password.</p>
+        <input id="forgot-otp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" class="text-input" />
+        <input id="forgot-new-password" type="password" placeholder="New password" class="text-input" autocomplete="new-password" />
+        <input id="forgot-confirm-password" type="password" placeholder="Confirm new password" class="text-input" autocomplete="new-password" />
+        <button id="btn-reset-password" class="btn-primary forgot-full-btn">Reset password</button>
+        <button id="btn-resend-otp" class="link-btn forgot-password-link" type="button">Resend code</button>
+      </div>
+
+      <p id="forgot-error" class="auth-error hidden"></p>
+      <button id="btn-back-to-signin" class="link-btn forgot-password-link" type="button">&larr; Back to sign in</button>
     </div>
   </div>
 
@@ -48,6 +76,7 @@
         <button id="btn-export" class="btn-ghost-sm" title="Export your whole cloud library as JSON">Export</button>
         <input id="import-file-input" type="file" accept="application/json" class="hidden" />
         <button id="btn-sign-out" class="btn-ghost-sm">Sign out</button>
+        <button id="btn-delete-account" class="btn-ghost-sm nav-danger-link" title="Permanently delete your account and all data">Delete Account</button>
       </div>
     </header>
 
@@ -146,6 +175,38 @@
       <div id="shares-loading" class="empty-state">
         <div class="empty-icon">☁</div>
         <p>Loading your shared links…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Delete account modal ────────────────────────────────────────────── -->
+  <div id="delete-modal" class="modal-backdrop hidden">
+    <div class="modal modal-small">
+      <div class="modal-header">
+        <h3 class="modal-title">Delete Account</h3>
+        <div class="modal-header-actions">
+          <button id="btn-close-delete" class="btn-ghost-sm">✕</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <p class="modal-warning">
+          This permanently deletes your account, every snip in your cloud library,
+          and any folder links you've shared. Local snips saved in the extension on
+          this device are not affected. <strong>This cannot be undone.</strong>
+        </p>
+        <div id="delete-password-row" class="hidden">
+          <label class="field-label" for="delete-password-input">Confirm your password</label>
+          <input id="delete-password-input" type="password" class="text-input" autocomplete="current-password" />
+        </div>
+        <div>
+          <label class="field-label" for="delete-confirm-input">Type <strong>DELETE</strong> to confirm</label>
+          <input id="delete-confirm-input" type="text" class="text-input" autocomplete="off" />
+        </div>
+        <p id="delete-error" class="auth-error hidden"></p>
+        <div class="auth-btn-row">
+          <button id="btn-confirm-delete" class="btn-danger-sm delete-confirm-btn">Delete my account</button>
+          <button id="btn-cancel-delete" class="btn-ghost">Cancel</button>
+        </div>
       </div>
     </div>
   </div>

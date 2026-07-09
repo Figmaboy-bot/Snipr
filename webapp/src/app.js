@@ -10,6 +10,10 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   signOut,
+  deleteUser,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  EmailAuthProvider,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -44,6 +48,9 @@ setPersistence(auth, browserLocalPersistence).catch(() => {});
 
 // Vercel deployment of api/mint-extension-token.js.
 const MINT_TOKEN_URL = "https://snipr-gamma.vercel.app/api/mint-extension-token";
+// Vercel deployments of api/request-password-otp.js and api/verify-password-otp.js.
+const REQUEST_OTP_URL = "https://snipr-gamma.vercel.app/api/request-password-otp";
+const VERIFY_OTP_URL = "https://snipr-gamma.vercel.app/api/verify-password-otp";
 
 // ── Extension sign-in handoff ─────────────────────────────────────────────────
 // If this page was opened from the extension's Sign in / Sign up buttons, the
@@ -116,6 +123,7 @@ onAuthStateChanged(auth, user => {
   state.user = user || null;
   if (user) {
     $("screen-auth").classList.add("hidden");
+    $("screen-forgot").classList.add("hidden");
     $("screen-app").classList.remove("hidden");
     $("user-email").textContent = user.email || user.displayName || "";
     subscribeLibrary(user.uid);
@@ -176,6 +184,146 @@ $("btn-google").addEventListener("click", async () => {
 
 $("btn-sign-out").addEventListener("click", () => signOut(auth));
 
+// ── Forgot password (email → OTP → new password) ────────────────────────────
+// Backed by api/request-password-otp.js and api/verify-password-otp.js, which
+// use the Admin SDK to check the account, mint a short-lived hashed 6-digit
+// code, email it via Resend, and — on verification — set the new password
+// directly. Unlike the rest of the app's auth errors, this flow deliberately
+// tells the caller whether the email has an account (a product decision, not
+// an oversight — see api/request-password-otp.js for the tradeoff).
+let otpCooldownTimer = null;
+
+function showForgotError(msg) {
+  const el = $("forgot-error");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+
+function showForgotScreen() {
+  $("screen-auth").classList.add("hidden");
+  $("screen-forgot").classList.remove("hidden");
+  $("forgot-error").classList.add("hidden");
+  $("forgot-step-otp").classList.add("hidden");
+  $("forgot-step-email").classList.remove("hidden");
+  $("forgot-email").value = $("auth-email").value.trim();
+  $("forgot-otp").value = "";
+  $("forgot-new-password").value = "";
+  $("forgot-confirm-password").value = "";
+}
+
+function showSignInScreen() {
+  $("screen-forgot").classList.add("hidden");
+  $("screen-auth").classList.remove("hidden");
+  clearTimeout(otpCooldownTimer);
+}
+
+async function requestOtp(email) {
+  const res = await fetch(REQUEST_OTP_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Something went wrong");
+  return data;
+}
+
+function startResendCooldown(seconds = 60) {
+  const btn = $("btn-resend-otp");
+  let remaining = seconds;
+  btn.disabled = true;
+  const tick = () => {
+    btn.textContent = remaining > 0 ? `Resend code (${remaining}s)` : "Resend code";
+    if (remaining <= 0) { btn.disabled = false; return; }
+    remaining -= 1;
+    otpCooldownTimer = setTimeout(tick, 1000);
+  };
+  tick();
+}
+
+$("btn-forgot-password").addEventListener("click", showForgotScreen);
+$("btn-back-to-signin").addEventListener("click", showSignInScreen);
+
+$("btn-send-otp").addEventListener("click", async () => {
+  $("forgot-error").classList.add("hidden");
+  const email = $("forgot-email").value.trim();
+  if (!email) return showForgotError("Enter your email.");
+
+  const btn = $("btn-send-otp");
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+  try {
+    const data = await requestOtp(email);
+    if (!data.exists) {
+      return showForgotError("No account found for that email.");
+    }
+    if (data.googleOnly) {
+      return showForgotError("This account signs in with Google — use “Continue with Google” instead.");
+    }
+    $("forgot-email-display").textContent = email;
+    $("forgot-step-email").classList.add("hidden");
+    $("forgot-step-otp").classList.remove("hidden");
+    startResendCooldown();
+    showToast(`Code sent to ${email}`);
+  } catch (err) {
+    showForgotError(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Send code";
+  }
+});
+
+$("btn-resend-otp").addEventListener("click", async () => {
+  $("forgot-error").classList.add("hidden");
+  const email = $("forgot-email").value.trim();
+  try {
+    await requestOtp(email);
+    startResendCooldown();
+    showToast(`Code sent to ${email}`);
+  } catch (err) {
+    showForgotError(err.message);
+  }
+});
+
+$("btn-reset-password").addEventListener("click", async () => {
+  $("forgot-error").classList.add("hidden");
+  const email = $("forgot-email").value.trim();
+  const otp = $("forgot-otp").value.trim();
+  const newPassword = $("forgot-new-password").value;
+  const confirmPassword = $("forgot-confirm-password").value;
+
+  if (!/^\d{6}$/.test(otp)) return showForgotError("Enter the 6-digit code.");
+  if (newPassword.length < 6) return showForgotError("Password must be at least 6 characters.");
+  if (newPassword !== confirmPassword) return showForgotError("Passwords don't match.");
+
+  const btn = $("btn-reset-password");
+  btn.disabled = true;
+  btn.textContent = "Resetting…";
+  try {
+    const res = await fetch(VERIFY_OTP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp, newPassword }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Something went wrong");
+
+    showSignInScreen();
+    $("auth-email").value = email;
+    $("auth-password").value = "";
+    showToast("Password reset — sign in with your new password.");
+  } catch (err) {
+    showForgotError(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Reset password";
+  }
+});
+
+$("forgot-confirm-password").addEventListener("keydown", e => {
+  if (e.key === "Enter") $("btn-reset-password").click();
+});
+
 // ── Library subscription ──────────────────────────────────────────────────────
 function subscribeLibrary(uid) {
   teardownLibrary();
@@ -209,6 +357,7 @@ function teardownLibrary() {
   if (unsubSaves) { unsubSaves(); unsubSaves = null; }
   if (unsubMeta) { unsubMeta(); unsubMeta = null; }
   closeSharesModal();
+  closeDeleteModal();
   state.saves = [];
   state.folders = [];
   state.categories = [];
@@ -689,6 +838,7 @@ document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
   closeDetail();
   closeSharesModal();
+  closeDeleteModal();
 });
 
 $("btn-delete-detail").addEventListener("click", async () => {
@@ -810,5 +960,104 @@ $("btn-my-shares").addEventListener("click", openSharesModal);
 $("btn-close-shares").addEventListener("click", closeSharesModal);
 $("shares-modal").addEventListener("click", e => {
   if (e.target === $("shares-modal")) closeSharesModal();
+});
+
+// ── Delete account ────────────────────────────────────────────────────────────
+// Wipes every doc this account owns (saves, meta, and any shares it published,
+// including their saves subcollections) before deleting the Auth user itself —
+// Firestore rules require request.auth to still be this user, so the Firestore
+// cleanup has to happen before deleteUser(), not after.
+function showDeleteError(msg) {
+  const el = $("delete-error");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+
+function openDeleteModal() {
+  if (!state.user) return;
+  $("delete-error").classList.add("hidden");
+  $("delete-confirm-input").value = "";
+  $("delete-password-input").value = "";
+  const isGoogle = state.user.providerData.some(p => p.providerId === "google.com");
+  $("delete-password-row").classList.toggle("hidden", isGoogle);
+  const btn = $("btn-confirm-delete");
+  btn.disabled = false;
+  btn.textContent = isGoogle ? "Confirm with Google & delete" : "Delete my account";
+  $("delete-modal").classList.remove("hidden");
+}
+
+function closeDeleteModal() {
+  $("delete-modal").classList.add("hidden");
+}
+
+async function deleteAllDocs(colRef) {
+  const snap = await getDocs(colRef);
+  for (const batchDocs of chunk(snap.docs, 400)) {
+    const batch = writeBatch(db);
+    batchDocs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }
+}
+
+async function deleteAllUserData(uid) {
+  await deleteAllDocs(collection(db, "users", uid, "saves"));
+  await deleteDoc(doc(db, "users", uid, "meta", "config")).catch(() => {});
+
+  const sharesSnap = await getDocs(query(collection(db, "shares"), where("ownerUid", "==", uid)));
+  for (const shareDoc of sharesSnap.docs) {
+    await deleteAllDocs(collection(db, "shares", shareDoc.id, "saves"));
+    await deleteDoc(shareDoc.ref);
+  }
+}
+
+function friendlyDeleteError(err) {
+  const code = err?.code || "";
+  if (code === "auth/missing-password") return "Enter your password to confirm.";
+  if (code === "auth/wrong-password" || code === "auth/invalid-credential") return "Wrong password.";
+  if (code === "auth/popup-closed-by-user") return "Google confirmation was cancelled.";
+  if (code === "auth/requires-recent-login") return "Please sign out and back in, then try again.";
+  return "Something went wrong — try again.";
+}
+
+$("btn-delete-account").addEventListener("click", openDeleteModal);
+$("btn-close-delete").addEventListener("click", closeDeleteModal);
+$("btn-cancel-delete").addEventListener("click", closeDeleteModal);
+$("delete-modal").addEventListener("click", e => {
+  if (e.target === $("delete-modal")) closeDeleteModal();
+});
+
+$("btn-confirm-delete").addEventListener("click", async () => {
+  $("delete-error").classList.add("hidden");
+  if ($("delete-confirm-input").value.trim().toUpperCase() !== "DELETE") {
+    return showDeleteError("Type DELETE to confirm.");
+  }
+
+  const btn = $("btn-confirm-delete");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Deleting…";
+
+  try {
+    const user = auth.currentUser;
+    const isGoogle = user.providerData.some(p => p.providerId === "google.com");
+    if (isGoogle) {
+      await reauthenticateWithPopup(user, new GoogleAuthProvider());
+    } else {
+      const password = $("delete-password-input").value;
+      if (!password) throw { code: "auth/missing-password" };
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
+    }
+
+    await deleteAllUserData(user.uid);
+    await deleteUser(user);
+
+    closeDeleteModal();
+    showToast("Your account and all data have been deleted.");
+  } catch (err) {
+    console.error("delete account failed", err);
+    btn.disabled = false;
+    btn.textContent = originalText;
+    showDeleteError(friendlyDeleteError(err));
+  }
 });
 

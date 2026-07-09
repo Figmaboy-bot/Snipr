@@ -40,8 +40,9 @@ Snips saved from the extension sync to Firestore and show up in the **Snipr web 
    - Get a service account key: Firebase Console → Project Settings → **Service accounts** → **Generate new private key** (downloads a JSON file — keep it secret, never commit it).
    - `vercel link` then `vercel deploy --prod` from the repo root (or connect the repo in the Vercel dashboard). `vercel.json` sets `outputDirectory: webapp`, so Vercel serves the web app as static output and auto-detects `api/mint-extension-token.js` as a serverless function — one deployment covers both.
    - In the Vercel project's **Settings → Environment Variables**, add `FIREBASE_SERVICE_ACCOUNT` with the *entire contents* of that JSON key file as the value, then redeploy so it takes effect.
+   - **Forgot-password emails** are sent via [Resend](https://resend.com) — create a free account, grab an API key, and add `RESEND_API_KEY` as an env var too. Optionally add `EMAIL_FROM` (e.g. `Snipr <noreply@yourdomain.com>`, once you've verified a sending domain in Resend) — it falls back to Resend's shared `onboarding@resend.dev` sender otherwise, which works but isn't a great long-term look for a password-reset email.
    - In **Settings → Deployment Protection**, make sure "Vercel Authentication" is off — otherwise both the web app and the API are blocked behind a Vercel SSO wall.
-   - This project is currently deployed at `https://snipr-gamma.vercel.app`. If you deploy your own copy, update the URL in three places: `MINT_TOKEN_URL` in `webapp/src/app.js`, `ALLOWED_ORIGINS` in `api/mint-extension-token.js`, and `WEBAPP_URL` in `popup.js` (also add it to `externally_connectable.matches` in `manifest.json`).
+   - This project is currently deployed at `https://snipr-gamma.vercel.app`. If you deploy your own copy, update the URL in these places: `MINT_TOKEN_URL`, `REQUEST_OTP_URL`, and `VERIFY_OTP_URL` in `webapp/src/app.js`; `ALLOWED_ORIGINS` in `api/mint-extension-token.js`, `api/request-password-otp.js`, and `api/verify-password-otp.js`; and `WEBAPP_URL` in `popup.js` (also add it to `externally_connectable.matches` in `manifest.json`).
 4. **Build the auth bundle after any `auth/firebase-auth.js` change, and rebuild+redeploy the web app after any `webapp/src/*.js` change**:
    ```bash
    npm run build          # builds auth/firebase-auth.bundle.js, webapp/app.bundle.js and webapp/share.bundle.js
@@ -60,6 +61,16 @@ Clicking **Sign in** / **Sign up** in the extension popup opens the web app in a
 Notes:
 - Screenshots are re-encoded as bounded JPEGs and very large HTML is truncated before upload (Firestore documents are capped at 1 MB). The full-quality copy always stays in the extension's local storage.
 - Deleting a snip in either place removes it from the cloud; local copies in the extension are only removed when deleted from the extension.
+
+### Forgot password
+
+"Forgot password?" on the sign-in screen leads to a dedicated screen: enter your email, get a 6-digit code (via `api/request-password-otp.js` + Resend), then enter the code and a new password (verified by `api/verify-password-otp.js`). Both endpoints use the Admin SDK, so the OTPs live in a `passwordResetOtps/{email}` Firestore collection that's never exposed to `firestore.rules` — only those two server functions can read or write it. Codes expire after 10 minutes, allow 5 wrong guesses before requiring a new one, and are rate-limited to one send per email per 60 seconds.
+
+Note this flow tells the user directly whether an email has an account ("No account found for that email") — a deliberate UX choice, not the enumeration-safe generic message a lot of auth flows use.
+
+### Delete account
+
+Signed-in users can permanently delete their account from the web app header (**Delete Account**) — this wipes every synced snip, folder/category metadata, and any share links they've published, then reauthenticates (password or Google popup) and deletes the Firebase Auth user itself. Local snips saved in the extension aren't touched.
 
 ### Sharing a folder
 
@@ -117,10 +128,13 @@ design-vault/
 │   │   ├── render-helpers.js       # Card/detail rendering shared by app.js and share.js
 │   │   └── render-helpers.test.js  # Vitest suite for render-helpers.js
 │   ├── app.bundle.js    # Built bundle loaded by index.html
-│   └── share.bundle.js  # Built bundle loaded by share.html
+│   ├── share.bundle.js  # Built bundle loaded by share.html
+│   └── privacy.html     # Privacy policy (for the Chrome Web Store listing)
 ├── firestore.rules      # Firestore security rules (paste into console)
 ├── api/
-│   └── mint-extension-token.js  # Vercel serverless function: webapp → extension sign-in handoff
+│   ├── mint-extension-token.js  # Vercel serverless function: webapp → extension sign-in handoff
+│   ├── request-password-otp.js  # Forgot-password step 1: email a 6-digit code via Resend
+│   └── verify-password-otp.js   # Forgot-password step 2: verify code, set new password
 ├── vercel.json          # Vercel config (outputDirectory: webapp)
 ├── firebase.json        # Firebase CLI config (firestore rules only)
 └── icons/               # Extension icons (add your own PNGs)

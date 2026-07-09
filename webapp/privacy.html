@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Snipr — Privacy Policy</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✂️</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .policy-wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 64px 24px 96px;
+      color: #fff;
+    }
+    .policy-wrap a { color: #fff; text-decoration: underline; }
+    .policy-card {
+      background: var(--surface);
+      color: var(--text);
+      border-radius: var(--radius);
+      padding: 40px clamp(20px, 5vw, 56px);
+    }
+    .policy-card h1 { font-family: var(--font-display); font-size: 40px; margin: 0 0 4px; }
+    .policy-updated { color: var(--muted); font-size: 14px; margin: 0 0 32px; }
+    .policy-card h2 { font-family: var(--font-display); font-size: 24px; margin: 36px 0 12px; }
+    .policy-card p, .policy-card li { line-height: 1.6; font-size: 15px; }
+    .policy-card ul { padding-left: 20px; }
+    .policy-card li { margin-bottom: 8px; }
+    .policy-card a { color: var(--accent); }
+    .policy-back { display: inline-block; margin-bottom: 24px; color: #fff; opacity: 0.85; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="policy-wrap">
+    <a class="policy-back" href="index.html">&larr; Back to Snipr</a>
+    <div class="policy-card">
+      <h1>Privacy Policy</h1>
+      <p class="policy-updated">Last updated: July 9, 2026</p>
+
+      <p>
+        Snipr is a Chrome extension and companion web app for saving and organizing
+        sections of web pages. This page explains what data Snipr collects, why, and
+        how it's stored.
+      </p>
+
+      <h2>What we collect</h2>
+      <ul>
+        <li>
+          <strong>Account info.</strong> When you sign in or sign up, we collect your
+          email address (and, if you use "Continue with Google", the name/email your
+          Google account shares) through Firebase Authentication. We use this only to
+          identify your account — we never see or store your password ourselves.
+        </li>
+        <li>
+          <strong>Saved sections ("snips").</strong> When you click a section of a page
+          and save it, we store the section's HTML, a screenshot image, the source page
+          URL, and any folder, category, or note you attach to it. This is the core
+          content of the product — it's what shows up in your library.
+        </li>
+        <li>
+          <strong>Organizational metadata.</strong> The folder and category names you
+          create, so your library looks the same across devices.
+        </li>
+      </ul>
+      <p>
+        We do not collect browsing history, analytics/tracking data, or any information
+        about pages you visit unless you actively click to save that page as a snip.
+      </p>
+
+      <h2>Why the extension requests broad site access</h2>
+      <p>
+        Snipr's extension requests permission to run on all sites (<code>&lt;all_urls&gt;</code>)
+        because its core function — letting you select and save a section from
+        <em>any</em> page you're browsing — only works if the content script can read
+        that page's DOM to detect and highlight sections. The extension does not read,
+        transmit, or store anything from a page unless you explicitly select and save a
+        section from it.
+      </p>
+
+      <h2>Where data is stored</h2>
+      <p>
+        Saved snips and account data are stored in Google Firestore under your user ID.
+        Screenshots are re-encoded as compressed JPEGs and large HTML is truncated
+        before upload to stay under Firestore's size limits; a full-quality copy stays
+        in your browser's local extension storage regardless of sign-in state.
+      </p>
+      <p>
+        Firestore security rules restrict every user's data so that only that user's
+        signed-in account can read or write it — we do not access it, and it is never
+        sold or shared with third parties for advertising or any other purpose.
+      </p>
+
+      <h2>Shared links</h2>
+      <p>
+        If you use "Share collection with a link" on a folder, a read-only snapshot of
+        that folder's snips at that moment becomes accessible to anyone with the link —
+        no sign-in required. Only folders you explicitly choose to share are made
+        public this way. You can revoke a share at any time from "My Shares" in the web
+        app, which permanently deletes that snapshot.
+      </p>
+
+      <h2>Deleting your data</h2>
+      <p>
+        Deleting a snip from the extension or the web app removes it from the cloud.
+        To delete your account and all associated data entirely — every saved snip,
+        your folders/categories, and any share links you've published — sign in to
+        the web app and click <strong>Delete Account</strong> in the header. This is
+        immediate and permanent; it cannot be undone. Local snips stored in the
+        extension on your own device are not affected and can be cleared from the
+        extension's own settings.
+      </p>
+
+      <h2>Third-party services</h2>
+      <p>
+        Snipr is built on <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase</a>
+        (authentication and database) and hosted on <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel</a>.
+        Both process data on our behalf under their own privacy and security
+        commitments; we don't share your data with any other third party.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        Questions about this policy or your data can be sent to
+        <a href="mailto:odeniransulaimon18@gmail.com">odeniransulaimon18@gmail.com</a>.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
