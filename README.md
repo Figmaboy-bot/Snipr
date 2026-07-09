@@ -1,4 +1,4 @@
-# ⬡ DesignVault
+# ✂️ Snipr
 
 A Chrome extension to capture and organize website sections by design type and industry category.
 
@@ -84,12 +84,12 @@ Click **🔗 My Shares** in the header to see every link you've published and **
 
 1. Open the popup and click **Sign in** / **Sign up** — this opens the web app to authenticate (email/password or Google). Session persists across popup opens.
 2. Navigate to any website
-3. Click the DesignVault icon in your toolbar
-3. The extension auto-scans the page and highlights detected sections
-4. Hover sections on the page to see their label — click to select
-5. Or use the list in the popup to select sections
-6. Pick a **folder**, add **categories**, optionally write a **note**
-7. Hit **Save to Vault**
+3. Click the Snipr icon in your toolbar
+4. The extension auto-scans the page and highlights detected sections
+5. Hover sections on the page to see their label — click to select
+6. Or use the list in the popup to select sections
+7. Pick a **folder**, add **categories**, optionally write a **note**
+8. Hit **Save to Vault**
 
 ## Testing
 
@@ -104,7 +104,7 @@ This covers the logic that's cheap to test in isolation — DOM rendering and da
 ## Project Structure
 
 ```
-design-vault/
+snipr/
 ├── manifest.json        # Extension config (MV3)
 ├── firebase-config.js   # Firebase web config (replace placeholders)
 ├── auth/
@@ -149,7 +149,7 @@ You need PNG icons at these sizes:
 - `icons/icon48.png`
 - `icons/icon128.png`
 
-You can use any design tool or generate them online. A simple hexagon works great for the DesignVault brand.
+You can use any design tool or generate them online.
 
 ## Next Steps / Roadmap
 
