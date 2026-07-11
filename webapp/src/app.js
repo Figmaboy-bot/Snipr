@@ -22,6 +22,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   onSnapshot,
   getDocs,
   deleteDoc,
@@ -101,6 +102,11 @@ const state = {
   shareCount: 0,
   detailSave: null,
   loaded: false,
+  // Whether state.saves currently holds the user's *entire* saves collection
+  // (true once any filter/search/export/import/share has forced a full
+  // fetch) vs. just the capped default-view window. See attachSavesListener.
+  fullyLoaded: false,
+  hasMoreOnServer: false,
 };
 
 let unsubSaves = null;
@@ -408,22 +414,78 @@ $("forgot-confirm-password").addEventListener("keydown", e => {
 });
 
 // ── Library subscription ──────────────────────────────────────────────────────
-function subscribeLibrary(uid) {
-  teardownLibrary();
+// The naive version of this (one unfiltered, unlimited onSnapshot on the
+// whole saves collection) bills a Firestore read for every snip a user has
+// EVERY time they open the webapp — the dominant cost driver on the free
+// Firestore plan's 50K-reads/day quota. Instead: the default "All, no
+// filters" view is capped to state.visibleCount (grown via Load More), and
+// only switches to an unlimited fetch — setting state.fullyLoaded — the
+// moment a folder/category/search filter is actually used, since those
+// filters are applied client-side and need the complete set to be correct.
+function isDefaultView() {
+  return !state.folderFilter && !state.categoryFilter && !state.searchQuery;
+}
+
+function attachSavesListener(uid, onFirstSnapshot) {
+  if (unsubSaves) { unsubSaves(); unsubSaves = null; }
   state.loaded = false;
   $("library-loading").classList.remove("hidden");
 
-  const savesQuery = query(collection(db, "users", uid, "saves"), orderBy("savedAt", "desc"));
+  const capped = isDefaultView() && !state.fullyLoaded;
+  // Fetch one extra doc past the cap purely to detect "is there more on the
+  // server" — trimmed back to visibleCount before it ever reaches state.saves.
+  const savesQuery = capped
+    ? query(collection(db, "users", uid, "saves"), orderBy("savedAt", "desc"), limit(state.visibleCount + 1))
+    : query(collection(db, "users", uid, "saves"), orderBy("savedAt", "desc"));
+
+  let firstSnapshotHandled = false;
+  const settleFirst = () => {
+    if (firstSnapshotHandled) return;
+    firstSnapshotHandled = true;
+    onFirstSnapshot?.();
+  };
+
   unsubSaves = onSnapshot(savesQuery, snap => {
-    state.saves = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (capped && docs.length > state.visibleCount) {
+      state.saves = docs.slice(0, state.visibleCount);
+      state.hasMoreOnServer = true;
+    } else {
+      state.saves = docs;
+      state.hasMoreOnServer = false;
+      if (!capped) state.fullyLoaded = true;
+    }
     state.loaded = true;
     $("library-loading").classList.add("hidden");
     renderLibrary();
+    settleFirst();
   }, err => {
     console.error("saves subscription failed", err);
     $("library-loading").classList.add("hidden");
     showToast("Couldn't load your library — check Firestore rules", "error");
+    settleFirst();
   });
+}
+
+// Forces state.saves up to the complete collection if it isn't already —
+// used before anything that reads across the whole library client-side
+// (share, export, import), where a partial/capped set would silently
+// under-share, under-export, or cause import to re-upload snips it thinks
+// are new. Awaiting this is cheap once fullyLoaded is already true.
+function ensureFullyLoaded() {
+  if (state.fullyLoaded || !state.user) return Promise.resolve();
+  return new Promise(resolve => attachSavesListener(state.user.uid, resolve));
+}
+
+// Switches the live listener from capped to unlimited the moment a filter
+// makes the capped window insufficient — no-ops once already fullyLoaded.
+function refreshSavesForFilterChange() {
+  if (!state.user || state.fullyLoaded) return;
+  attachSavesListener(state.user.uid);
+}
+
+function subscribeLibrary(uid) {
+  attachSavesListener(uid);
 
   unsubMeta = onSnapshot(doc(db, "users", uid, "meta", "config"), snap => {
     const data = snap.data() || {};
@@ -448,6 +510,8 @@ function teardownLibrary() {
   state.categoryFilter = "";
   state.searchQuery = "";
   state.visibleCount = PAGE_SIZE;
+  state.fullyLoaded = false;
+  state.hasMoreOnServer = false;
   $("search-input").value = "";
   $("btn-clear-search").classList.add("hidden");
   $("btn-share-folder").classList.add("hidden");
@@ -463,14 +527,26 @@ function renderFolderTabs() {
   const allTab = document.createElement("div");
   allTab.className = "tab" + (!state.folderFilter ? " active" : "");
   allTab.textContent = "All";
-  allTab.addEventListener("click", () => { state.folderFilter = null; state.visibleCount = PAGE_SIZE; renderFolderTabs(); renderLibrary(); });
+  allTab.addEventListener("click", () => {
+    state.folderFilter = null;
+    state.visibleCount = PAGE_SIZE;
+    renderFolderTabs();
+    refreshSavesForFilterChange();
+    renderLibrary();
+  });
   el.appendChild(allTab);
 
   state.folders.forEach(f => {
     const tab = document.createElement("div");
     tab.className = "tab" + (state.folderFilter === f.id ? " active" : "");
     tab.textContent = `${f.icon} ${f.name}`;
-    tab.addEventListener("click", () => { state.folderFilter = f.id; state.visibleCount = PAGE_SIZE; renderFolderTabs(); renderLibrary(); });
+    tab.addEventListener("click", () => {
+      state.folderFilter = f.id;
+      state.visibleCount = PAGE_SIZE;
+      renderFolderTabs();
+      refreshSavesForFilterChange();
+      renderLibrary();
+    });
     el.appendChild(tab);
   });
 
@@ -493,6 +569,7 @@ function renderCategoryFilter() {
 $("category-filter").addEventListener("change", e => {
   state.categoryFilter = e.target.value;
   state.visibleCount = PAGE_SIZE;
+  refreshSavesForFilterChange();
   renderLibrary();
 });
 
@@ -503,6 +580,7 @@ $("category-filter").addEventListener("change", e => {
 // independent snapshot — it does not update a previous link.
 async function shareFolder() {
   if (!state.folderFilter || !state.user) return;
+  await ensureFullyLoaded();
   const folder = state.folders.find(f => f.id === state.folderFilter);
   const saves = state.saves.filter(s => s.folderId === state.folderFilter);
   if (!saves.length) return showToast("This folder is empty — nothing to share", "error");
@@ -581,16 +659,26 @@ $("btn-share-folder").addEventListener("click", shareFolder);
 // only covers that one browser's local, possibly-unsynced storage. The two
 // produce/accept the same JSON shape, so a file exported from either side can
 // be imported into the other.
-function exportVault() {
-  const saves = state.saves.map(({ syncedAt, ...rest }) => rest);
-  const data = { saves, folders: state.folders, categories: state.categories };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `snipr-export-${Date.now()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+async function exportVault() {
+  const btn = $("btn-export");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Exporting…";
+  try {
+    await ensureFullyLoaded();
+    const saves = state.saves.map(({ syncedAt, ...rest }) => rest);
+    const data = { saves, folders: state.folders, categories: state.categories };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `snipr-export-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
 }
 
 $("btn-export").addEventListener("click", exportVault);
@@ -660,6 +748,7 @@ async function importVaultFromFile(file) {
   btn.textContent = "Importing…";
 
   try {
+    await ensureFullyLoaded();
     const { newSaves, skippedSaves, newFolders, newCategories } = computeImportDelta(state, parsed);
 
     if (newFolders.length || newCategories.length) {
@@ -709,6 +798,7 @@ $("search-input").addEventListener("input", e => {
   searchDebounce = setTimeout(() => {
     state.searchQuery = value.trim().toLowerCase();
     state.visibleCount = PAGE_SIZE;
+    refreshSavesForFilterChange();
     renderLibrary();
   }, 150);
 });
@@ -718,6 +808,7 @@ $("btn-clear-search").addEventListener("click", () => {
   $("btn-clear-search").classList.add("hidden");
   state.searchQuery = "";
   state.visibleCount = PAGE_SIZE;
+  refreshSavesForFilterChange();
   renderLibrary();
   $("search-input").focus();
 });
@@ -760,8 +851,12 @@ function renderLibrary() {
 
   const visible = saves.slice(0, state.visibleCount);
   const remaining = saves.length - visible.length;
-  $("btn-load-more").textContent = `Load more (${visible.length} of ${saves.length})`;
-  $("library-load-more").classList.toggle("hidden", remaining <= 0);
+  // In the capped default view, `saves.length` is only what's loaded so far
+  // (not the true total), so whether to show Load More comes from the
+  // server-reported hasMoreOnServer flag instead of the usual remaining-count math.
+  const cappedHasMore = isDefaultView() && !state.fullyLoaded && state.hasMoreOnServer;
+  $("btn-load-more").textContent = cappedHasMore ? "Load more" : `Load more (${visible.length} of ${saves.length})`;
+  $("library-load-more").classList.toggle("hidden", remaining <= 0 && !cappedHasMore);
 
   visible.forEach(save => {
     const folder = state.folders.find(f => f.id === save.folderId);
@@ -804,7 +899,11 @@ function renderLibrary() {
 
 $("btn-load-more").addEventListener("click", () => {
   state.visibleCount += PAGE_SIZE;
-  renderLibrary();
+  if (isDefaultView() && !state.fullyLoaded && state.user) {
+    attachSavesListener(state.user.uid);
+  } else {
+    renderLibrary();
+  }
 });
 
 async function deleteSave(saveId) {

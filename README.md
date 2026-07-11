@@ -80,6 +80,10 @@ In the web app, select a folder tab (not "All") and click **🔗 Share** to publ
 
 Click **🔗 My Shares** in the header to see every link you've published and **Revoke** any of them — revoking deletes the shared snapshot entirely (not just the listing), so the link stops working immediately for anyone who has it.
 
+### Library reads (Firestore quota)
+
+The default "All snips, no filters" view is fetched from Firestore in capped pages (`PAGE_SIZE`, grown via **Load more**) instead of the whole `saves` collection — on Firestore's free Spark plan (50K reads/day), an unbounded query means every webapp open costs one read per snip the user has, which is the fastest way to exhaust that quota as usage grows. The moment a folder tab, category filter, or search is used, the app switches to a full fetch (needed since those are filtered client-side) — as do Export, Import, and Share, since they all need the complete library to be correct. That full fetch is cached client-side for the rest of the session, not repeated on every keystroke or filter change.
+
 ## Usage
 
 1. Open the popup and click **Sign in** / **Sign up** — this opens the web app to authenticate (email/password or Google). Session persists across popup opens.
